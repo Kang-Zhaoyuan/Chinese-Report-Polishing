@@ -28,10 +28,14 @@ BLOCK_START_PATTERN = re.compile(
 
 
 def is_likely_code_paragraph(text):
-    """判断文本是否为代码段或终端输出日志。"""
+    """判断文本是否为代码段（C/C++/CUDA/Python/MATLAB/DSP/Verilog）或终端/仿真/抓包输出日志。"""
     code_indicators = [
         ';', '{', '}', '#include', '#pragma', '__shared__', '__m256',
-        'PASS ', 'Total Errors', 'for (', 'if (', 'float ', 'int ', 'dim3 '
+        'PASS ', 'Total Errors', 'for (', 'if (', 'float ', 'int ', 'dim3 ',
+        'clc;', 'clear;', 'close all', 'subplot(', 'plot(', 'fft(', 'randn(',
+        'freqz(', 'butter(', 'fir1(', 'cheby1(', 'conv(', 'filter(', 'hamming(',
+        'module ', 'endmodule', 'always @(', 'assign ',
+        '64 bytes from', 'icmp_seq=', 'ttl=', 'traceroute', 'tcpdump'
     ]
     hits = sum(1 for ind in code_indicators if ind in text)
     return hits >= 2
