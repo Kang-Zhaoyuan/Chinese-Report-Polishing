@@ -1,6 +1,6 @@
 ---
 name: chinese-report-polishing
-description: 中文理工科实验报告的语言审查技能。由顶层调度者统筹，通过常驻撰改线程配合每轮新建的审核线程，经工作区文件交换，分两阶段消除人工智能写作痕迹、防御性论述、无意义冗余及句间逻辑断层。
+description: 中文理工科实验报告的语言审查技能。由顶层调度者统筹，通过常驻撰改线程配合四类专职审核线程，经工作区文件交换，消除人工智能写作痕迹、防御性论述、无意义冗余及句间逻辑断层。
 ---
 
 # 中文实验报告语言审改规范
@@ -11,27 +11,29 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
 
 ## 一、 顶层调度执行流程
 
-当前主线程作为**顶层调度者（Orchestrator）**运行，不直接读取实验指导书、不查阅实验代码、不改写报告正文。架构设计细节与通信协议见 [references/architecture.md](references/architecture.md)。
+当前主线程作为**顶层调度者（Orchestrator）**运行，不直接读取实验指导书、不查阅实验代码、不改写报告正文。架构设计细节见 [references/architecture.md](references/architecture.md)。
 
 1. **初始化工作区**：
-   创建 `.polish_workspace/` 目录，准备 `task_spec.md`（任务要求）与 `draft_current.md`（由常驻撰改者子线程生成初稿，或直接载入已有初稿），并保存常驻撰改者子线程的会话标识（`conversationId`）。
-2. **第一阶段循环（宏观结构审定）**：
-   - 按 [references/reviewer_prompt.md](references/reviewer_prompt.md) 模板一新建审核者子线程，输出 `.polish_workspace/round_{k}_review.md`。
-   - 若输出为 `STAGE_1_PASSED`，进入第二阶段；否则按模板三唤醒常驻撰改者子线程更新 `draft_current.md` 与 `dispute_ledger.md`，进入下一轮。
-3. **第二阶段循环（微观语言精修）**：
-   - 运行静态扫描脚本：
-     ```bash
-     python scripts/check_prose.py .polish_workspace/draft_current.md > .polish_workspace/prose_scan.txt
-     ```
-   - 按 [references/reviewer_prompt.md](references/reviewer_prompt.md) 模板二新建审核者子线程，输出 `.polish_workspace/round_{k}_review.md`。
-   - 若输出为 `STAGE_2_PASSED`（或仅剩针对 `HOLD_FOR_HUMAN` 冻结文本的异议），终止流程并交付最终文稿；否则按模板三唤醒常驻撰改者子线程处理批注，进入下一轮。
+   创建 `.polish_workspace/` 目录，准备 `task_spec.md`（任务要求）与待审报告文稿（支持 `.docx` 或 `.md`，可由常驻撰改者生成初稿，或直接载入已有初稿），并保存常驻撰改者的会话标识（`conversationId`）。
+2. **每轮前置提取与扫描**：
+   由于最终文稿常为 `.docx` 格式，每次启动专职审核子线程前，顶层调度者先运行 [scripts/check_prose.py](scripts/check_prose.py)，同步生成带定位编号的纯文本视图 `draft_view.md`（含正文段落与数据表格单元格）及静态扫描报告 `prose_scan.txt`：
+   ```bash
+   python scripts/check_prose.py <当前文稿路径> --extract .polish_workspace/draft_view.md > .polish_workspace/prose_scan.txt
+   ```
+3. **按序执行四道专职审核工序**：
+   按 [references/reviewer_prompt.md](references/reviewer_prompt.md) 中的模板一至模板四，依次推进四道专职审核工序（每轮均新建独立审核子线程，输出至 `.polish_workspace/round_{k}_review.md`）：
+   - **工序一：宏观结构审核者（第 1、2、3 类）** $\rightarrow$ 直至输出 `STAGE_1_PASSED`；
+   - **工序二：信息冗余审核者（第 4、5、6、8、9 类）** $\rightarrow$ 直至输出 `STAGE_2A_PASSED`；
+   - **工序三：段落逻辑审核者（第 10、12 类）** $\rightarrow$ 直至输出 `STAGE_2B_PASSED`；
+   - **工序四：句法词法审核者（第 7、11、13、14 类）** $\rightarrow$ 直至输出 `STAGE_2C_PASSED`。
+   任一轮若未输出通过标记，顶层调度者即按模板五唤醒常驻撰改者，修改原文稿并更新 `dispute_ledger.md`，随后重新执行当前工序审查。
 
 ---
 
 ## 二、 参考文件索引
 
-- [references/architecture.md](references/architecture.md)：三层线程职责划分、两阶段状态流转及工作区文件通信协议。
+- [references/architecture.md](references/architecture.md)：三层线程职责划分、四道专职审核工序及工作区文件通信协议。
 - [references/error_taxonomy.md](references/error_taxonomy.md)：14 类语言错误的定义、原因说明、伪正则模式及真实修改典例。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个经典自然段拆解案例库。
-- [references/reviewer_prompt.md](references/reviewer_prompt.md)：顶层调度者派发或唤醒子线程的指令模板。
-- [scripts/check_prose.py](scripts/check_prose.py)：超长单句、同段高频词、并列标题及高危词句的静态扫描脚本。
+- [references/reviewer_prompt.md](references/reviewer_prompt.md)：各子线程的派发及唤醒指令模板。
+- [scripts/check_prose.py](scripts/check_prose.py)：支持 `.docx` 表格提取、自然段合并及语言线索扫描的静态脚本。
