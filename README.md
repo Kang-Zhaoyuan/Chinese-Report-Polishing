@@ -13,7 +13,66 @@
 系统采用三层角色隔离架构，通过 `.polish_workspace/` 下的本地文件交换数据，原生支持 `.docx` 文稿的提取与审改：
 - **顶层调度者（Orchestrator）**：主线程，仅负责按工序运行专项静态扫描脚本、派发子线程及控制工序流转，不在自身上下文中载入指导书或报告正文。
 - **常驻撰改者（Writer-Refiner）**：单一持久子线程，全程复用同一会话完成写稿与多轮改稿，掌握实验代码与历轮修改依据，在审核意见违背专业事实时行使反驳权。
-- **四类专职审核分身（Specialist Reviewers）**：专人干专事，每道工序绑定独立的扫描模块并新建独立子线程，按**宏观结构审核（1～3 类）$\rightarrow$ 信息冗余审核（4、5、6、8、9 类）$\rightarrow$ 段落逻辑审核（10、12 类）$\rightarrow$ 句法词法审核（7、11、13、14 类）**依次推进，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
+- **四类专职审核分身（Specialist Reviewers）**：专人干专事，每道工序绑定独立的扫描模块并新建独立子线程，按**宏观结构审核（1～3 类）$\\rightarrow$ 信息冗余审核（4、5、6、8、9 类）$\\rightarrow$ 段落逻辑审核（10、12 类）$\\rightarrow$ 句法词法审核（7、11、13、14 类）**依次推进，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
+
+### 工作流程示意
+
+下图展示从资料输入、初稿撰写到四道专项审核的完整流程。审核者每轮独立新建；撰改者保持同一会话。每道工序发现问题后，都会回到撰改环节，修改完成再重新审核当前工序。
+
+```mermaid
+flowchart TD
+    IN["输入资料<br/>实验指导书 · 报告要求<br/>实验代码 · 测试日志 · 初稿"]
+    ORCH["Orchestrator｜顶层调度者<br/>初始化工作区 · 运行专项扫描 · 派发审核线程<br/>只负责调度，不直接改写报告"]
+    WRITER["Writer-Refiner｜常驻撰改者<br/>撰写初稿并持续修改同一份文稿<br/>保留实验事实、代码依据与历轮修改记录"]
+
+    IN --> ORCH --> WRITER
+
+    subgraph PIPELINE["四道专职审核工序｜每轮新建独立 Reviewer"]
+      direction TB
+
+      S1["① 宏观结构审核｜第 1–3 类<br/>scan_structure.py<br/>检查内容范围、代码修改说明与标题中心<br/>例：只讲矩阵乘法原理 → 指明 MatrixMulKernel 的索引、乘加与写回修改"]
+      S2["② 信息冗余审核｜第 4、5、6、8、9 类<br/>scan_redundancy.py<br/>删除防御性声明、自我证实、常识赘述与图表重复<br/>例：从表 1 和图 1 可以看出…… → 直接陈述实验现象"]
+      S3["③ 段落逻辑审核｜第 10、12 类<br/>scan_logic.py<br/>检查归因是否具体、句间关系是否清楚<br/>例：边界处理可能影响耗时 → 解释 1000 = 32 × 31 + 8 时边界线程如何执行"]
+      S4["④ 句法词法审核｜第 7、11、13、14 类<br/>scan_syntax.py<br/>检查 AI 套话、主语、长句与公式表达<br/>例：实验选择该函数 → 因此，选择该函数作为优化对象"]
+
+      S1 -->|"STAGE_1_PASSED"| S2
+      S2 -->|"STAGE_2A_PASSED"| S3
+      S3 -->|"STAGE_2B_PASSED"| S4
+    end
+
+    WRITER --> S1
+
+    S1 -->|"发现问题：提交批注"| WRITER
+    WRITER -->|"修改文稿并更新 dispute_ledger.md；重审当前工序"| S1
+
+    S2 -->|"发现问题：提交批注"| WRITER
+    WRITER -->|"修改文稿并更新 dispute_ledger.md；重审当前工序"| S2
+
+    S3 -->|"发现问题：提交批注"| WRITER
+    WRITER -->|"修改文稿并更新 dispute_ledger.md；重审当前工序"| S3
+
+    S4 -->|"发现问题：提交批注"| WRITER
+    WRITER -->|"修改文稿并更新 dispute_ledger.md；重审当前工序"| S4
+
+    WRITER -->|"同一位置往返分歧达到 2 次"| HUMAN["HOLD_FOR_HUMAN<br/>冻结争议文本 · 交由人工裁决"]
+    HUMAN -->|"人工裁决后恢复流程"| ORCH
+
+    S4 -->|"STAGE_2C_PASSED"| OUT["输出语言审改完成稿<br/>.docx / .md<br/>排版由其他流程负责"]
+
+    classDef input fill:#eef5ff,stroke:#4b78a8,color:#18324b
+    classDef role fill:#f4f1ff,stroke:#7662a8,color:#30234f
+    classDef review fill:#eef8f1,stroke:#4f8a62,color:#183b25
+    classDef human fill:#fff4e5,stroke:#b77b2d,color:#59380d
+    classDef output fill:#e8f5f2,stroke:#438a78,color:#183c34
+
+    class IN input
+    class ORCH,WRITER role
+    class S1,S2,S3,S4 review
+    class HUMAN human
+    class OUT output
+```
+
+**阅读示例：** 四道审核工序分别处理结构、冗余、逻辑和句法问题。图中的措辞示例均取自本项目的典型修改经验；具体修改仍须结合实验事实和上下文判断，不能机械套用。发生专业判断分歧时，由 Writer 保留技术依据；同一位置往返争议达到两次，则交由人工裁决。
 
 ---
 
