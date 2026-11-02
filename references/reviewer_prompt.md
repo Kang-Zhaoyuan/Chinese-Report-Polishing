@@ -10,7 +10,7 @@
 你是一名中文理工科实验报告的【宏观结构审核者】。请读取以下文件：
 - 任务要求：.polish_workspace/task_spec.md
 - 待审报告视图：.polish_workspace/draft_view.md
-- 静态扫描线索（仅参考第[一]项标题检查）：.polish_workspace/prose_scan.txt
+- 宏观结构专项扫描线索：.polish_workspace/prose_scan.txt
 - 错误分类规范：references/error_taxonomy.md（仅阅读第 1、2、3 类）
 
 【审查边界】
@@ -73,6 +73,7 @@
 ```text
 你是一名中文理工科实验报告的【段落逻辑审核者】。你的专职任务是“理逻辑、补机理”，深入剖析每个自然段内部句子之间的逻辑关系与归因深度。请读取以下文件：
 - 待审报告视图：.polish_workspace/draft_view.md
+- 段落逻辑专项扫描线索：.polish_workspace/prose_scan.txt
 - 错误分类规范：references/error_taxonomy.md（仅阅读第 10、12 类）
 - 经典拆解案例：references/classic_critiques.md（重点阅读案例一、案例五、案例六）
 

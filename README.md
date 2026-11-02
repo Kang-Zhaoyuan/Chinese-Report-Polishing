@@ -11,9 +11,9 @@
 ## 一、 运行机制
 
 系统采用三层角色隔离架构，通过 `.polish_workspace/` 下的本地文件交换数据，原生支持 `.docx` 文稿的提取与审改：
-- **顶层调度者（Orchestrator）**：主线程，仅负责运行静态扫描与文本提取脚本、按序派发子线程及控制工序流转，不在自身上下文中载入指导书或报告正文。
+- **顶层调度者（Orchestrator）**：主线程，仅负责按工序运行专项静态扫描脚本、派发子线程及控制工序流转，不在自身上下文中载入指导书或报告正文。
 - **常驻撰改者（Writer-Refiner）**：单一持久子线程，全程复用同一会话完成写稿与多轮改稿，掌握实验代码与历轮修改依据，在审核意见违背专业事实时行使反驳权。
-- **四类专职审核者（Specialist Reviewers）**：专人干专事，每轮新建独立子线程，按**宏观结构审核（1～3 类）$\rightarrow$ 信息冗余审核（4、5、6、8、9 类）$\rightarrow$ 段落逻辑审核（10、12 类）$\rightarrow$ 句法词法审核（7、11、13、14 类）**四道工序依次审查，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
+- **四类专职审核分身（Specialist Reviewers）**：专人干专事，每道工序绑定独立的扫描模块并新建独立子线程，按**宏观结构审核（1～3 类）$\rightarrow$ 信息冗余审核（4、5、6、8、9 类）$\rightarrow$ 段落逻辑审核（10、12 类）$\rightarrow$ 句法词法审核（7、11、13、14 类）**依次推进，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
 
 ---
 
@@ -23,5 +23,11 @@
 - [references/architecture.md](references/architecture.md)：三层线程职责、四道专职审核工序及文件通信协议。
 - [references/error_taxonomy.md](references/error_taxonomy.md)：14 类语言错误的症状定义、说服逻辑、伪正则模式及原版对照典例。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个多轮自然段拆解与演进案例。
-- [references/reviewer_prompt.md](references/reviewer_prompt.md)：四类专职审核线程与常驻撰改线程的派发指令模板。
-- [scripts/check_prose.py](scripts/check_prose.py)：支持 `.docx` 表格提取、跨行自然段合并及四类语言线索扫描的静态脚本。
+- [references/reviewer_prompt.md](references/reviewer_prompt.md)：四类专职审核分身与常驻撰改线程的派发指令模板。
+- `scripts/`（模块化静态扫描器，配对四个审核分身）：
+  - [scripts/check_prose.py](scripts/check_prose.py)：命令行总控调度入口（支持 `--stage` 与 `--extract`）。
+  - [scripts/doc_parser.py](scripts/doc_parser.py)：`.docx` 非代码框表格递归解析、跨行自然段合并及纯文本镜像导出模块。
+  - [scripts/scan_structure.py](scripts/scan_structure.py)：配对【宏观结构审核者】。
+  - [scripts/scan_redundancy.py](scripts/scan_redundancy.py)：配对【信息冗余审核者】。
+  - [scripts/scan_logic.py](scripts/scan_logic.py)：配对【段落逻辑审核者】。
+  - [scripts/scan_syntax.py](scripts/scan_syntax.py)：配对【句法词法审核者】。
