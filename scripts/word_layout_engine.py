@@ -43,26 +43,47 @@ def create_omath_element(expr: str, size_pt: float = 11.0):
     """
     将数学表达式字符串转换为 Word 原生 OMML (<m:oMath>) 节点。
     单字母变量默认斜体，多字母标识符、运算符与数字直立体 (<m:sty m:val="p"/>)。
+    使用 XML 元素 API 设置文本节点，避免直接拼接未经转义的内容。
     """
     half_pts = int(round(size_pt * 2))
     omath = parse_xml(f'<m:oMath {nsdecls("m", "w")}/>')
-    tokens = re.findall(r'[A-Za-z_]+|\d+|->|[∈≤≥≠=+\-*/(),\[\]]|\s+|.', expr)
+    tokens = re.findall(r'[A-Za-z_]+|\d+|->|[∈≤≥≠=+\-*/(),\[\]<>≤≥&|]|\s+|.', expr)
     for tok in tokens:
         if not tok:
             continue
         is_single_var = bool(re.fullmatch(r'[A-Za-z]', tok))
-        sty_xml = '' if is_single_var else '<m:sty m:val="p"/>'
-        r_xml = (
-            f'<m:r {nsdecls("m", "w")}>'
-            f'<m:rPr>{sty_xml}</m:rPr>'
-            f'<w:rPr>'
-            f'<w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math" w:eastAsia="宋体" w:cs="Cambria Math"/>'
-            f'<w:sz w:val="{half_pts}"/><w:szCs w:val="{half_pts}"/>'
-            f'</w:rPr>'
-            f'<m:t xml:space="preserve">{tok}</m:t>'
-            f'</m:r>'
-        )
-        omath.append(parse_xml(r_xml))
+        
+        r = OxmlElement('m:r')
+        rPr = OxmlElement('m:rPr')
+        if not is_single_var:
+            sty = OxmlElement('m:sty')
+            sty.set(qn('m:val'), 'p')
+            rPr.append(sty)
+        r.append(rPr)
+        
+        w_rPr = OxmlElement('w:rPr')
+        rFonts = OxmlElement('w:rFonts')
+        rFonts.set(qn('w:ascii'), 'Cambria Math')
+        rFonts.set(qn('w:hAnsi'), 'Cambria Math')
+        rFonts.set(qn('w:eastAsia'), '宋体')
+        rFonts.set(qn('w:cs'), 'Cambria Math')
+        w_rPr.append(rFonts)
+        
+        sz = OxmlElement('w:sz')
+        sz.set(qn('w:val'), str(half_pts))
+        w_rPr.append(sz)
+        
+        szCs = OxmlElement('w:szCs')
+        szCs.set(qn('w:val'), str(half_pts))
+        w_rPr.append(szCs)
+        r.append(w_rPr)
+        
+        t = OxmlElement('m:t')
+        t.set(qn('xml:space'), 'preserve')
+        t.text = tok
+        r.append(t)
+        
+        omath.append(r)
     return omath
 
 

@@ -10,11 +10,20 @@ Word 实验报告排版机械静态检查器 (check_layout.py)
 """
 
 import sys
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 import os
 import re
 from pathlib import Path
 from docx import Document
 from docx.oxml.ns import qn
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from doc_parser import is_code_box_table
 
 
 def is_spacer_paragraph(p):
@@ -43,9 +52,8 @@ def check_word_layout(docx_path: str):
         if idx == -1:
             continue
             
-        rows_len = len(table.rows)
-        cols_len = len(table.columns)
-        is_code_box = (rows_len == 1 and cols_len == 1)
+        # 与 doc_parser.py 共用识别逻辑：结合 1x1 结构、文本特征及等宽代码字体判定
+        is_code_box = is_code_box_table(tbl_el)
         
         # 1. 检查 cantSplit
         tr = tbl_el.find(".//" + qn("w:tr"))

@@ -45,7 +45,10 @@ def is_code_box_table(tbl_elem):
     """
     判断 Word 表格是否为 1x1 代码框或终端输出框：
     仅当表格为 1 行 1 列，且内部含代码/终端特征或主要使用等宽代码字体时返回 True。
+    支持传入 xml Element 或 docx.table.Table 对象。
     """
+    if hasattr(tbl_elem, '_tbl'):
+        tbl_elem = tbl_elem._tbl
     rows = tbl_elem.findall(f'./{W_NS}tr')
     if len(rows) != 1:
         return False

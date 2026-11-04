@@ -25,24 +25,24 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
    确认材料齐全后，创建 `.polish_workspace/` 目录，准备 `task_spec.md`（任务要求）与待审报告文稿（支持 `.docx` 或 `.md`，可由常驻撰改者生成初稿，或直接载入已有初稿），并保存常驻撰改者的会话标识（`conversationId`）。
 
 3. **按序推进四道专职审核工序** ：
-   每道工序绑定独立的扫描模块（模板见 [references/reviewer_prompt.md](references/reviewer_prompt.md)）。每轮启动审核分身前，顶层调度者先调用对应 `--stage` 参数，导出纯文本镜像 `draft_view.md`，并生成当前分身专属的 `prose_scan.txt`（若扫描报告缺失，审核分身亦可自主执行脚本生成）：
+   每道工序绑定独立的扫描模块（模板见 [references/reviewer_prompt.md](references/reviewer_prompt.md)）。顶层调度者统一维护一份【已冻结的人工裁决位置清单】（初始为空）。每轮启动审核分身前，顶层调度者负责调用对应 `--stage` 参数，导出纯文本镜像 `draft_view.md` 并生成专属的 `prose_scan.txt`。派发指令时，顶层调度者显式传入原文稿路径及当前冻结清单：
    - **工序一：宏观结构审核者（第 1～3 类）**
-     - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage structure > .polish_workspace/prose_scan.txt`（底层调用 [scan_structure.py](scripts/scan_structure.py)）
+     - 调度生成扫描报告：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage structure > .polish_workspace/prose_scan.txt`（底层调用 [scan_structure.py](scripts/scan_structure.py)）
      - 专属子手册：[references/taxonomy_stage1_structure.md](references/taxonomy_stage1_structure.md)
-     - 循环新建宏观结构审核分身，直至输出 `STAGE_1_PASSED`。
+     - 循环新建宏观结构审核分身（自动跳过已冻结位置），直至未冻结文本全部达标输出 `STAGE_1_PASSED`。
    - **工序二：信息冗余审核者（第 4～8 类）**
-     - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage redundancy > .polish_workspace/prose_scan.txt`（底层调用 [scan_redundancy.py](scripts/scan_redundancy.py)）
+     - 调度生成扫描报告：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage redundancy > .polish_workspace/prose_scan.txt`（底层调用 [scan_redundancy.py](scripts/scan_redundancy.py)）
      - 专属子手册：[references/taxonomy_stage2_redundancy.md](references/taxonomy_stage2_redundancy.md)
-     - 循环新建信息冗余审核分身，直至输出 `STAGE_2A_PASSED`。
+     - 循环新建信息冗余审核分身（自动跳过已冻结位置），直至未冻结文本全部达标输出 `STAGE_2A_PASSED`。
    - **工序三：段落逻辑审核者（第 9～10 类）**
-     - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage logic > .polish_workspace/prose_scan.txt`（底层调用 [scan_logic.py](scripts/scan_logic.py)）
+     - 调度生成扫描报告：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage logic > .polish_workspace/prose_scan.txt`（底层调用 [scan_logic.py](scripts/scan_logic.py)）
      - 专属子手册：[references/taxonomy_stage3_logic.md](references/taxonomy_stage3_logic.md)
-     - 循环新建段落逻辑审核分身，直至输出 `STAGE_2B_PASSED`。
+     - 循环新建段落逻辑审核分身（自动跳过已冻结位置），直至未冻结文本全部达标输出 `STAGE_2B_PASSED`。
    - **工序四：句法词法审核者（第 11～15 类）**
-     - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage syntax > .polish_workspace/prose_scan.txt`（底层调用 [scan_syntax.py](scripts/scan_syntax.py)）
+     - 调度生成扫描报告：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage syntax > .polish_workspace/prose_scan.txt`（底层调用 [scan_syntax.py](scripts/scan_syntax.py)）
      - 专属子手册：[references/taxonomy_stage4_syntax.md](references/taxonomy_stage4_syntax.md)
-     - 循环新建句法词法审核分身，直至输出 `STAGE_2C_PASSED`。
-   任一轮若未输出通过标记，顶层调度者即按模板五唤醒常驻撰改者，修改原文稿并更新 `dispute_ledger.md`，随后重新执行当前工序。
+     - 循环新建句法词法审核分身（自动跳过已冻结位置），直至未冻结文本全部达标输出 `STAGE_2C_PASSED`。
+   任一轮若未输出通过标记，顶层调度者即按模板五唤醒常驻撰改者修改文稿并更新 `dispute_log.md`。若产生新增的 `HOLD_FOR_HUMAN` 争议，常驻撰改者向顶层调度者汇报对应位置编号，顶层调度者将其加入冻结清单。后续审核轮次自动跳过已冻结位置，直至未冻结文本全部达标通过。四道工序全部完成后，若存在冻结位置，顶层调度者汇总清单并在对话中提请用户最终人工裁决。
 
 ---
 
