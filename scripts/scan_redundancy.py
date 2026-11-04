@@ -2,18 +2,24 @@
 # -*- coding: utf-8 -*-
 """
 工序二专职扫描器：信息冗余扫描 (scan_redundancy.py)
-配合角色：【信息冗余审核者】（负责第 4、5、6、8、9 类错误，专职“做减法”）
+配合角色：【信息冗余审核者】（负责第 4、5、6、7、8 类错误，专职“做减法”）
 
 输出线索：
 1. 第 4 类：防御性局限声明（未测数据免责、内部机制未知免责、条件受限免责、泛泛优化空间免责）；
 2. 第 5 类：无信息增益的自我证实表述（空洞真实性修饰、重复任务要求前提、段末同义反复确认）；
 3. 第 6 类：面向专业阅读者的基础常识解释（基础语法/下标/单位换算常识、跨表重复说明）；
-4. 第 8 类：正文密集复述图表具体数值嫌疑、可移入表头的符号说明；
-5. 第 9 类：冗余的图表引导与主观自评。
+4. 第 7 类：重复图表已呈现的数据或符号说明（正文密集复述图表具体数值嫌疑、可移入表头的符号说明）；
+5. 第 8 类：冗余图表引导与主观自评。
 """
 
 import re
 import sys
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 import os
 from doc_parser import load_document_items, iter_clean_items, is_heading_item
 
@@ -72,15 +78,15 @@ REDUNDANCY_PATTERNS = [
         r'所谓[^，。；]{1,15}[，,]?\s*(?:是指|即指|就是)|'
         r'[^，。；]{2,15}(?:定理|定律|定义)(?:指出|表明|认为|是指)'
     ),
-    # 第 8 类：可移入表头的符号定义说明
+    # 第 7 类：可移入表头的符号定义说明
     (
-        '第 8 类：符号定义或表名重复嫌疑（可移入表头括号或删去）',
+        '第 7 类：符号定义或表名重复嫌疑（可移入表头括号或删去）',
         r'其中\s*[，,]?\s*[A-Za-z0-9_]+\s*(?:和|与|、)\s*[A-Za-z0-9_]+\s*分别(?:表示|代表|为)|'
         r'(?:表|图)\s*[\d\-]+\s*(?:列出了|给出了|展示了|显示了|汇总了)[^，。；]{2,20}对应的(?:尺寸|数据|结果|耗时|性能|速度)'
     ),
-    # 第 9 类：冗余的图表引导与自评
+    # 第 8 类：冗余的图表引导与自评
     (
-        '第 9 类：冗余的图表引导与主观自评',
+        '第 8 类：冗余的图表引导与主观自评',
         r'为了(?:更|更加)?(?:直观|清晰|清楚|一目了然|形象|便于)地?(?:比较|展示|呈现|观察|看出|体现|反映|对比)|'
         r'图\s*[\d\-]+\s*(?:根据|依据|基于|由)\s*表\s*[\d\-]+\s*的?(?:数据|结果)?(?:绘制|展示|给出|呈现)|'
         r'(?:从|由|观察|对比|结合)\s*(?:表\s*[\d\-]+|图\s*[\d\-]+)(?:和|与|及)?(?:表\s*[\d\-]+|图\s*[\d\-]+)?\s*(?:中|的数据|的结果)?(?:可以|能够|不难)?(?:看出|看到|发现|得知|观察到)|'
@@ -115,7 +121,7 @@ def scan_redundancy(items):
 
 def print_redundancy_report(res, src_name):
     print(f"=== [工序二：信息冗余审核] 静态扫描线索: {src_name} ===")
-    print("说明：本报告仅供【信息冗余审核者】参考，聚焦第 4、5、6、8、9 类冗余删减问题。\n")
+    print("说明：本报告仅供【信息冗余审核者】参考，聚焦第 4、5、6、7、8 类冗余删减问题。\n")
 
     print(f"[1. 防御性声明、自我证实、常识解释与图表引导冗余] ({len(res['pattern_hits'])} 处)")
     for loc_id, cat_name, hit, text in res['pattern_hits']:
@@ -124,7 +130,7 @@ def print_redundancy_report(res, src_name):
     if not res['pattern_hits']:
         print("  - 无")
 
-    print(f"\n[2. 第 8 类线索：正文密集列举浮点测量值（请核对是否与图表重复）] ({len(res['numeric_recap_suspects'])} 处)")
+    print(f"\n[2. 第 7 类线索：正文密集列举浮点测量值（请核对是否与图表重复）] ({len(res['numeric_recap_suspects'])} 处)")
     for loc_id, floats, text in res['numeric_recap_suspects']:
         preview = text if len(text) <= 85 else text[:82] + '...'
         print(f"  - 位置 {loc_id} (含 {len(floats)} 个浮点数 {floats[:5]}):\n    上下文: {preview}")

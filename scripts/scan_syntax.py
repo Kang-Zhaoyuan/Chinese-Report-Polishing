@@ -2,18 +2,25 @@
 # -*- coding: utf-8 -*-
 """
 工序四专职扫描器：句法词法扫描 (scan_syntax.py)
-配合角色：【句法词法审核者】（负责第 7、11、13、14、15 类错误，专职“抠字句与段落颗粒度”）
+配合角色：【句法词法审核者】（负责第 11～15 类错误，专职“抠字句与段落颗粒度”）
 
 输出线索：
-1. 第 7 类：人工智能过拟合词汇与欧化翻译腔（覆盖正文及数据表格单元格）；
-2. 第 11 类：主语使用异常（伪拟人主语、第一人称泄露、同段 >= 3 次高频重复词）；
-3. 第 13 类：标点间超过 20 个阅读单位的超长单句；
-4. 第 14 类：自然语言算术与中文数字参数；
-5. 第 15 类：复合分支未拆分（字数 >= 220 且含多项复杂分支的实心长段）。
+1. 第 11 类：人工智能过拟合词汇与欧化翻译腔（覆盖正文及数据表格单元格）；
+2. 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无物理机理支撑的形容词名词化套话）；
+3. 第 12 类：主语使用异常（伪拟人主语、第一人称泄露、同段 >= 3 次高频重复词）；
+4. 第 13 类：标点间超过 20 个阅读单位的超长单句；
+5. 第 14 类：自然语言算术与中文数字参数；
+6. 第 15 类：复合分支未拆分（字数 >= 220 且含多项复杂分支的实心长段）。
 """
 
 import re
 import sys
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 import os
 from doc_parser import load_document_items, iter_clean_items, is_heading_item
 
@@ -29,23 +36,29 @@ AI_OVERFIT_WORDS = [
     # 机械过渡与顺从套话
     '你说得对', '诚然', '综上所述', '总而言之', '由此可见', '值得注意的是',
     '不可否认的是', '显而易见', '不难发现',
-]
+]  # 注：所有“{形容词}性”抽象套话由独立单字扫描函数全面覆盖
 
 SYNTAX_PATTERNS = [
     (
-        '第 7 类：欧化翻译腔与公文套话句式',
+        '第 11 类：欧化翻译腔与公文套话句式',
         r'不仅.*?而且|一方面.*?另一方面|基于.*?而言|在.*?的背景下|'
         r'从.*?的(?:角度|维度|层面)来看|扮演着.*?的角色|发挥着.*?的作用|'
         r'提供了.*?的(?:支撑|保障)|实现了.*?的(?:跨越|突破|闭环)'
     ),
     (
-        '第 11 类：伪拟人主语嫌疑（无生命名词充当人类决策主语，应删去主语）',
+        '第 11 类：空洞的“{形容词}性”评价与归因套话',
+        r'(?:提高|提升|增强|保证|保障|确保|体现|展现|兼顾|具备|具有)(?:了)?[^，。；]{0,10}的?'
+        r'(?:鲁棒|健壮|灵活|扩展|可扩展|优越|先进|便捷|易用|全面|科学|规范|严密|适应|通用)性|'
+        r'(?:鲁棒|健壮|灵活|可扩展|优越|先进|便捷|易用)性(?:得到|获得|显著|大幅)?(?:提升|提高|增强|保证)'
+    ),
+    (
+        '第 12 类：伪拟人主语嫌疑（无生命名词充当人类决策主语，应删去主语）',
         r'(?:^|[，。；：]\s*)(?:本|该|此次)?(?:实验|报告|本文|本节|本研究|本小节|方案)'
         r'(?:进一步|首先|随后|最终|因此|遂)?'
         r'(?:选择|选用|选取|决定|考虑|认为|意识到|注意到|推断|猜测|倾向于|试图|尝试|打算)'
     ),
     (
-        '第 11 类：第一人称主语泄露（严禁出现第一人称）',
+        '第 12 类：第一人称主语泄露（严禁出现第一人称）',
         r'我们|笔者|本人|(?<![A-Za-z])我(?:在|通过|使用|选择|发现|将|对|认为|编写|实现|测试)'
     ),
     (
@@ -83,6 +96,46 @@ TRACKED_REPEAT_WORDS = [
 
 SPLIT_PUNCT = re.compile(r'(?:[，。；：？！、,;?!（）()|]|\.(?![A-Za-z0-9_]))+')
 
+EXCLUDE_XING_WORDS = {'性能', '性质'}
+XING_STOP_CHARS = set('，。；：、！？（）() \t\n\r的了与和及在或从为更很最于以对使让把被向其该本此')
+
+
+def find_xing_words(text):
+    """
+    单字独立扫描“性”字，提取抽象形容词名词化候选词。
+    使用简单扫描和 if 语句：
+    1. 若未包含“性”字，直接返回空列表；
+    2. 遍历“性”字位置，若紧随其后为“能”或“质”（如“性能”、“性质”），直接跳过；
+    3. 向前截取词素（最多 4 字符），若遇标点、介词或白名单词则过滤。
+    """
+    if '性' not in text:
+        return []
+
+    hits = []
+    for i, ch in enumerate(text):
+        if ch != '性':
+            continue
+
+        # 简单 if 判断：若后面跟着“能”或“质”（如“性能”、“性质”），直接跳过
+        if i + 1 < len(text) and text[i + 1] in ('能', '质'):
+            continue
+
+        # 向前截取词素（最多 4 个汉字字符，遇到标点或停顿虚词停下）
+        start = i
+        while start > 0 and (i - start) < 4:
+            prev_ch = text[start - 1]
+            if prev_ch in XING_STOP_CHARS or not ('\u4e00' <= prev_ch <= '\u9fff'):
+                break
+            start -= 1
+
+        word = text[start:i + 1]
+        if word in EXCLUDE_XING_WORDS or not word:
+            continue
+
+        hits.append(word)
+
+    return list(dict.fromkeys(hits))
+
 
 def measure_clause_length(clause):
     """
@@ -98,6 +151,7 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=
     long_clauses = []
     repeat_issues = []
     word_and_syntax_hits = []
+    xing_hits = []
     collapsed_paras = []
 
     for loc_id, text, kind in iter_clean_items(items):
@@ -113,7 +167,7 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=
             if c_len > max_clause_len:
                 long_clauses.append((loc_id, c_len, c))
 
-        # 2. 第 11 类：同段高频重复词检查（长度 >= 30 字的自然段）
+        # 2. 第 12 类：同段高频重复词检查（长度 >= 30 字的自然段）
         if len(text) >= 30:
             found_repeats = []
             for w in TRACKED_REPEAT_WORDS:
@@ -126,12 +180,17 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=
             if found_repeats:
                 repeat_issues.append((loc_id, ', '.join(found_repeats), text))
 
-        # 3. 第 7 类：AI 过拟合词汇检查（含正文与表格单元格）
+        # 3. 第 11 类：AI 过拟合词汇检查（含正文与表格单元格）
         hit_words = [w for w in AI_OVERFIT_WORDS if w in text]
         if hit_words:
-            word_and_syntax_hits.append((loc_id, '第 7 类：AI 过拟合词汇', f"命中词汇: {hit_words}", text))
+            word_and_syntax_hits.append((loc_id, '第 11 类：AI 过拟合词汇', f"命中词汇: {hit_words}", text))
 
-        # 4. 第 7、11、14 类正则模式检查
+        # 4. 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无机理支撑的形容词名词化套话）
+        xing_words = find_xing_words(text)
+        if xing_words:
+            xing_hits.append((loc_id, xing_words, text))
+
+        # 5. 第 11、12、14 类正则模式检查
         for cat_name, pat in SYNTAX_PATTERNS:
             m = re.search(pat, text)
             if m:
@@ -154,13 +213,14 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=
         'long_clauses': long_clauses,
         'repeat_issues': repeat_issues,
         'word_and_syntax_hits': word_and_syntax_hits,
+        'xing_hits': xing_hits,
         'collapsed_paras': collapsed_paras,
     }
 
 
 def print_syntax_report(res, src_name):
     print(f"=== [工序四：句法词法审核] 静态扫描线索: {src_name} ===")
-    print("说明：本报告仅供【句法词法审核者】参考，聚焦第 7、11、13、14、15 类问题。\n")
+    print("说明：本报告仅供【句法词法审核者】参考，聚焦第 11～15 类问题。\n")
 
     print(f"[1. 第 13 类：超过 {res['max_clause_len']} 字符的超长单句] ({len(res['long_clauses'])} 处)")
     for loc_id, c_len, c_text in res['long_clauses']:
@@ -168,21 +228,29 @@ def print_syntax_report(res, src_name):
     if not res['long_clauses']:
         print("  - 无")
 
-    print(f"\n[2. 第 11 类：同段高频重复词 (单段 >= {res['repeat_threshold']} 次)] ({len(res['repeat_issues'])} 处)")
+    print(f"\n[2. 第 12 类：同段高频重复词 (单段 >= {res['repeat_threshold']} 次)] ({len(res['repeat_issues'])} 处)")
     for loc_id, rep_info, p_text in res['repeat_issues']:
         preview = p_text if len(p_text) <= 80 else p_text[:77] + '...'
         print(f"  - 位置 {loc_id} [{rep_info}]: {preview}")
     if not res['repeat_issues']:
         print("  - 无")
 
-    print(f"\n[3. 第 7、11、14 类：高危词汇、伪拟人主语与自然语言算术] ({len(res['word_and_syntax_hits'])} 处)")
+    print(f"\n[3. 第 11、12、14 类：高危词汇、伪拟人主语与自然语言算术] ({len(res['word_and_syntax_hits'])} 处)")
     for loc_id, cat, detail, p_text in res['word_and_syntax_hits']:
         preview = p_text if len(p_text) <= 85 else p_text[:82] + '...'
         print(f"  - 位置 {loc_id} [{cat}] {detail}\n    上下文: {preview}")
     if not res['word_and_syntax_hits']:
         print("  - 无")
 
-    print(f"\n[4. 第 15 类：复合分支未拆分长段落候选 (字数 >= 220 且含多项分支)] ({len(res['collapsed_paras'])} 处)")
+    print(f"\n[4. 第 11 类：“性”字单字独立扫描 (排查无机理支撑的抽象套话)] ({len(res['xing_hits'])} 处)")
+    print("  说明：已排除“性能”、“性质”等具象名词。请审核者核查命中的抽象词是否缺乏物理机理或实测数据支撑；专业技术术语（如空间局部性、非线性）可予保留。")
+    for loc_id, words, p_text in res['xing_hits']:
+        preview = p_text if len(p_text) <= 85 else p_text[:82] + '...'
+        print(f"  - 位置 {loc_id} 命中词: {words}\n    上下文: {preview}")
+    if not res['xing_hits']:
+        print("  - 无")
+
+    print(f"\n[5. 第 15 类：复合分支未拆分长段落候选 (字数 >= 220 且含多项分支)] ({len(res['collapsed_paras'])} 处)")
     print("  说明：仅供切分参考。遵循柔性分寸：不强求标点划一，且允许全文保留 1 个左右紧凑大段。")
     for loc_id, p_len, p_text in res['collapsed_paras']:
         preview = p_text if len(p_text) <= 85 else p_text[:82] + '...'
