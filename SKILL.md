@@ -15,17 +15,17 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
 
 > **排版询问机制（可选插件）** ：启动本技能时，若用户未明确指定排版要求，顶层调度者应显式用自然语言询问用户是否需要启用 Word 排版模块；若用户未明确确认，**默认不启用** 排版，仅专注于文稿语言质量审查。排版具体准则见 [references/rules_word_typesetting.md](references/rules_word_typesetting.md)。
 
-1. **信息充分性检查（强制前置门禁）** ：
+1. **前置材料充分性检查** ：
    在启动撰写或审核子线程前，顶层调度者必须首先核验是否掌握了足够的实验材料：
    - **实验要求 / 指导书**：是否能定位到实验指导书文件（如已存在 `task_spec.md` 或用户在对话中给出了明确实验步骤与评分要求）；
    - **实验代码与数据**：是否能定位到本次实验的源码目录、修改补丁（`git diff` / `patch`）或实测运行日志。
-   > **门禁规则** ：若上述两项关键材料缺失任意一项，**顶层调度者必须立即暂停后续所有流程，直接在对话框中向用户明确询问并索取缺失的文件或代码路径**，严禁凭空推测或脑补代码实现细节。
+   > **缺失处理约束** ：若上述两项关键材料缺失任意一项，**顶层调度者必须立即暂停后续所有流程，直接在对话框中向用户明确询问并索取缺失的文件或代码路径**，严禁凭空推测或脑补代码实现细节。
 
 2. **初始化工作区** ：
    确认材料齐全后，创建 `.polish_workspace/` 目录，准备 `task_spec.md`（任务要求）与待审报告文稿（支持 `.docx` 或 `.md`，可由常驻撰改者生成初稿，或直接载入已有初稿），并保存常驻撰改者的会话标识（`conversationId`）。
 
 3. **按序推进四道专职审核工序** ：
-   每道工序绑定独立的扫描模块（模板见 [references/reviewer_prompt.md](references/reviewer_prompt.md)）。每轮启动审核分身前，顶层调度者先调用对应 `--stage` 参数，导出纯文本镜像 `draft_view.md`，并生成当前分身专属的 `prose_scan.txt`（审核分身亦具备自主执行生成脚本的双重自愈能力）：
+   每道工序绑定独立的扫描模块（模板见 [references/reviewer_prompt.md](references/reviewer_prompt.md)）。每轮启动审核分身前，顶层调度者先调用对应 `--stage` 参数，导出纯文本镜像 `draft_view.md`，并生成当前分身专属的 `prose_scan.txt`（若扫描报告缺失，审核分身亦可自主执行脚本生成）：
    - **工序一：宏观结构审核者（第 1～3 类）**
      - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage structure > .polish_workspace/prose_scan.txt`（底层调用 [scan_structure.py](scripts/scan_structure.py)）
      - 专属子手册：[references/taxonomy_stage1_structure.md](references/taxonomy_stage1_structure.md)

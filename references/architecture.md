@@ -61,7 +61,7 @@ python scripts/check_prose.py <当前文稿.docx> --extract .polish_workspace/dr
 `.polish_workspace/` 下的固定通信文件如下：
 - `task_spec.md`：任务要求或实验指导书。
 - `draft_view.md`：由 [doc_parser.py](../scripts/doc_parser.py) 提取的纯文本镜像，正文段落标记为 `[P{n}]`，数据表格单元格标记为 `[T{t}R{r}C{c}]`，1×1 代码框标记为 `[1x1 代码/终端输出框]`（审核者只读）。
-- `prose_scan.txt`：当前工序专属的静态扫描输出，定位编号同 `draft_view.md` 对齐（审核者只读）。
+- `prose_scan.txt`：当前工序专属的静态扫描输出，定位编号与 `draft_view.md` 保持一致（审核者只读）。
 - `review_stage{S}_r{R}.md`：工序 `{S}` 第 `{R}` 轮审查批注单（审核者写入，撰改者只读；例如首轮为 `review_stage1_r1.md`，若工序二驳回重改第二轮为 `review_stage2_r2.md`）。
 - `dispute_ledger.md`：批注处理记录与争议计数账本（撰改者维护，对审核者隐藏）。
 
