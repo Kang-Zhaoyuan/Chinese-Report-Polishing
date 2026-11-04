@@ -28,7 +28,7 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
    - **工序三：段落逻辑审核者（第 10、12 类）**
      - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage logic > .polish_workspace/prose_scan.txt`（底层调用 [scan_logic.py](scripts/scan_logic.py)）
      - 循环新建段落逻辑审核分身，直至输出 `STAGE_2B_PASSED`。
-   - **工序四：句法词法审核者（第 7、11、13、14 类）**
+   - **工序四：句法词法审核者（第 7、11、13、14、15 类）**
      - 前置扫描：`python scripts/check_prose.py <文稿> --extract .polish_workspace/draft_view.md --stage syntax > .polish_workspace/prose_scan.txt`（底层调用 [scan_syntax.py](scripts/scan_syntax.py)）
      - 循环新建句法词法审核分身，直至输出 `STAGE_2C_PASSED`。
    任一轮若未输出通过标记，顶层调度者即按模板五唤醒常驻撰改者，修改原文稿并更新 `dispute_ledger.md`，随后重新执行当前工序。
@@ -38,7 +38,7 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
 ## 二、 文件索引
 
 - [references/architecture.md](references/architecture.md)：三层线程职责、四道专职工序及工作区文件通信协议。
-- [references/error_taxonomy.md](references/error_taxonomy.md)：14 类语言错误的定义、原因说明、伪正则模式及真实修改典例。
+- [references/error_taxonomy.md](references/error_taxonomy.md)：15 类语言错误的定义、原因说明、伪正则模式及真实修改典例。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个经典自然段拆解案例库。
 - [references/reviewer_prompt.md](references/reviewer_prompt.md)：各子线程的派发及唤醒指令模板。
 - [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告紧凑排版工程规范（空行三态、跨页流式代码框、双轨字体与 OMML 原生公式）。

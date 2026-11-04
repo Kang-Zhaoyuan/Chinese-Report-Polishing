@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 工序四专职扫描器：句法词法扫描 (scan_syntax.py)
-配合角色：【句法词法审核者】（负责第 7、11、13、14 类错误，专职“抠字句”）
+配合角色：【句法词法审核者】（负责第 7、11、13、14、15 类错误，专职“抠字句与段落颗粒度”）
 
 输出线索：
 1. 第 7 类：人工智能过拟合词汇与欧化翻译腔（覆盖正文及数据表格单元格）；
 2. 第 11 类：主语使用异常（伪拟人主语、第一人称泄露、同段 >= 3 次高频重复词）；
 3. 第 13 类：标点间超过 20 个阅读单位的超长单句；
-4. 第 14 类：自然语言算术与中文数字参数。
+4. 第 14 类：自然语言算术与中文数字参数；
+5. 第 15 类：复合分支未拆分（字数 >= 220 且含多项复杂分支的实心长段）。
 """
 
 import re
@@ -93,10 +94,11 @@ def measure_clause_length(clause):
     return len(collapsed)
 
 
-def scan_syntax(items, max_clause_len=20, repeat_threshold=3):
+def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=220):
     long_clauses = []
     repeat_issues = []
     word_and_syntax_hits = []
+    collapsed_paras = []
 
     for loc_id, text, kind in iter_clean_items(items):
         if is_heading_item(text, kind):
@@ -135,18 +137,30 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3):
             if m:
                 word_and_syntax_hits.append((loc_id, cat_name, f"命中片段: “{m.group(0).strip()}”", text))
 
+        # 5. 第 15 类：复合分支未拆分长段落（6 行/220 字以上且内含序列标记）
+        if len(text) >= min_collapsed_len:
+            has_branches = (
+                bool(re.search(r'(?:第一|首先).*?(?:第二|其次)', text))
+                or bool(re.search(r'阶段一.*?阶段二', text))
+                or bool(re.search(r'\(1\).*?\(2\)', text))
+                or bool(re.search(r'\(a\).*?\(b\)', text))
+            )
+            if has_branches:
+                collapsed_paras.append((loc_id, len(text), text))
+
     return {
         'max_clause_len': max_clause_len,
         'repeat_threshold': repeat_threshold,
         'long_clauses': long_clauses,
         'repeat_issues': repeat_issues,
         'word_and_syntax_hits': word_and_syntax_hits,
+        'collapsed_paras': collapsed_paras,
     }
 
 
 def print_syntax_report(res, src_name):
     print(f"=== [工序四：句法词法审核] 静态扫描线索: {src_name} ===")
-    print("说明：本报告仅供【句法词法审核者】参考，聚焦第 7、11、13、14 类问题。\n")
+    print("说明：本报告仅供【句法词法审核者】参考，聚焦第 7、11、13、14、15 类问题。\n")
 
     print(f"[1. 第 13 类：超过 {res['max_clause_len']} 字符的超长单句] ({len(res['long_clauses'])} 处)")
     for loc_id, c_len, c_text in res['long_clauses']:
@@ -166,6 +180,14 @@ def print_syntax_report(res, src_name):
         preview = p_text if len(p_text) <= 85 else p_text[:82] + '...'
         print(f"  - 位置 {loc_id} [{cat}] {detail}\n    上下文: {preview}")
     if not res['word_and_syntax_hits']:
+        print("  - 无")
+
+    print(f"\n[4. 第 15 类：复合分支未拆分长段落候选 (字数 >= 220 且含多项分支)] ({len(res['collapsed_paras'])} 处)")
+    print("  说明：仅供切分参考。遵循柔性分寸：不强求标点划一，且允许全文保留 1 个左右紧凑大段。")
+    for loc_id, p_len, p_text in res['collapsed_paras']:
+        preview = p_text if len(p_text) <= 85 else p_text[:82] + '...'
+        print(f"  - 位置 {loc_id} (字数 {p_len}): {preview}")
+    if not res['collapsed_paras']:
         print("  - 无")
 
 

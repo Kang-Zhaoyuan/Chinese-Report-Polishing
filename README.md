@@ -15,7 +15,7 @@
 系统采用三层角色隔离架构，通过 `.polish_workspace/` 下的本地文件交换数据，原生支持 `.docx` 文稿的提取与审改：
 - **顶层调度者（Orchestrator）**：主线程，仅负责按工序运行专项静态扫描脚本、派发子线程及控制工序流转，不在自身上下文中载入指导书或报告正文。
 - **常驻撰改者（Writer-Refiner）**：单一持久子线程，全程复用同一会话完成写稿与多轮改稿，掌握实验代码与历轮修改依据，在审核意见违背专业事实时行使反驳权。
-- **四类专职审核分身（Specialist Reviewers）**：专人干专事，每道工序绑定独立的扫描模块并新建独立子线程，按 **宏观结构审核（1～3 类） → 信息冗余审核（4、5、6、8、9 类） → 段落逻辑审核（10、12 类） → 句法词法审核（7、11、13、14 类）** 依次推进，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
+- **四类专职审核分身（Specialist Reviewers）**：专人干专事，每道工序绑定独立的扫描模块并新建独立子线程，按 **宏观结构审核（1～3 类） → 信息冗余审核（4、5、6、8、9 类） → 段落逻辑审核（10、12 类） → 句法词法审核（7、11、13、14、15 类）** 依次推进，单轮结束后即销毁。同一位置往返分歧达 2 次时，标记为 `HOLD_FOR_HUMAN` 交由人工裁决。
 
 ---
 
@@ -23,7 +23,7 @@
 
 - [SKILL.md](SKILL.md)：技能入口与顶层调度执行步骤。
 - [references/architecture.md](references/architecture.md)：三层线程职责、四道专职审核工序及文件通信协议。
-- [references/error_taxonomy.md](references/error_taxonomy.md)：14 类语言错误的症状定义、说服逻辑、伪正则模式及原版对照典例。
+- [references/error_taxonomy.md](references/error_taxonomy.md)：15 类语言错误的症状定义、说服逻辑、伪正则模式及原版对照典例。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个多轮自然段拆解与演进案例。
 - [references/reviewer_prompt.md](references/reviewer_prompt.md)：四类专职审核分身与常驻撰改线程的派发指令模板。
 - [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告紧凑排版工程规范（空行三态、跨页流式代码框、双轨字体与 OMML 原生公式）。
