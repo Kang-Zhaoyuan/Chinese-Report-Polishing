@@ -45,9 +45,11 @@
   - [references/taxonomy_stage4_syntax.md](references/taxonomy_stage4_syntax.md)：工序四专属手册（第 11～15 类）。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个多轮自然段拆解与演进案例。
 - [references/reviewer_prompt.md](references/reviewer_prompt.md)：撰改者开局指令与四类专职审核分身的派发指令模板。
-- [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告紧凑排版工程规范（8523 dxa 居中基准、大章节强制分页、68 字符单行容量限制、VS Code Beautifier 风格行尾注释第 44 列垂直对齐、空行三态、跨页流式代码框、双轨字体与 OMML 原生公式）。
-- [references/typesetting_case_os_lab4.md](references/typesetting_case_os_lab4.md)：排版基准案例一（操作系统 Lab 4 关键版面解析：表格收窄居中、大章节另起新页、单行代码完整保留与行尾注释垂直列对齐）。
-- [references/typesetting_case_csapp_lab4_5.md](references/typesetting_case_csapp_lab4_5.md)：排版基准案例二（CSAPP Lab 4-5 关键版面解析：长代码跨页流式断开无留白、多列数据表空行与原生 OMML 矢量公式）。
+- [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告排版规范总则（8523 dxa 居中基准、参数速查与子手册导航）。
+  - [references/typesetting_spacing_geometry.md](references/typesetting_spacing_geometry.md)：子手册一（版面几何与空行规范：左右边距、容器收窄、大章节分页与空行三态）。
+  - [references/typesetting_code_blocks.md](references/typesetting_code_blocks.md)：子手册二（代码排版与注释规范：流式跨页、68 字符单行容量、逻辑单行跨行内在缩进、行尾注释垂直列对齐）。
+  - [references/typesetting_fonts_math.md](references/typesetting_fonts_math.md)：子手册三（字符字体与公式规范：中西文字体映射、OMML 原生矢量公式）。
+  - [references/typesetting_self_referential_case.md](references/typesetting_self_referential_case.md)：经典基准案例（自指示范范文：全要素自指叙述与一页式渲染示范）。
 - `scripts/`（包含语言扫描模块与排版工程套件）：
   - [scripts/word_layout_engine.py](scripts/word_layout_engine.py)：Word 紧凑排版工程引擎（支持 8523 dxa 收窄、Beautifier 注释对齐、跨页流式代码框与 Word COM 无损导出）。
   - [scripts/check_layout.py](scripts/check_layout.py)：Word 报告机械静态排版合规检查器。
