@@ -45,8 +45,12 @@
   - [references/taxonomy_stage4_syntax.md](references/taxonomy_stage4_syntax.md)：工序四专属手册（第 11～15 类）。
 - [references/classic_critiques.md](references/classic_critiques.md)：8 个多轮自然段拆解与演进案例。
 - [references/reviewer_prompt.md](references/reviewer_prompt.md)：撰改者开局指令与四类专职审核分身的派发指令模板。
-- [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告紧凑排版工程规范（空行三态、跨页流式代码框、双轨字体与 OMML 原生公式）。
-- `scripts/`（模块化静态扫描器，配对四个审核分身）：
+- [references/rules_word_typesetting.md](references/rules_word_typesetting.md)：【可选插件】Word 实验报告紧凑排版工程规范（8523 dxa 居中基准、大章节强制分页、68 字符单行容量限制、VS Code Beautifier 风格行尾注释第 44 列垂直对齐、空行三态、跨页流式代码框、双轨字体与 OMML 原生公式）。
+- [references/typesetting_case_os_lab4.md](references/typesetting_case_os_lab4.md)：排版基准案例一（操作系统 Lab 4 关键版面解析：表格收窄居中、大章节另起新页、单行代码完整保留与行尾注释垂直列对齐）。
+- [references/typesetting_case_csapp_lab4_5.md](references/typesetting_case_csapp_lab4_5.md)：排版基准案例二（CSAPP Lab 4-5 关键版面解析：长代码跨页流式断开无留白、多列数据表空行与原生 OMML 矢量公式）。
+- `scripts/`（包含语言扫描模块与排版工程套件）：
+  - [scripts/word_layout_engine.py](scripts/word_layout_engine.py)：Word 紧凑排版工程引擎（支持 8523 dxa 收窄、Beautifier 注释对齐、跨页流式代码框与 Word COM 无损导出）。
+  - [scripts/check_layout.py](scripts/check_layout.py)：Word 报告机械静态排版合规检查器。
   - [scripts/check_prose.py](scripts/check_prose.py)：命令行总控调度入口（支持 `--stage` 与 `--extract`）。
   - [scripts/doc_parser.py](scripts/doc_parser.py)：`.docx` 非代码框表格递归解析、跨行自然段合并及纯文本镜像导出模块。
   - [scripts/scan_structure.py](scripts/scan_structure.py)：配对【宏观结构审核者】。

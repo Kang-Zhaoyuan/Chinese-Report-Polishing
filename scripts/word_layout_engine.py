@@ -3,11 +3,15 @@
 """
 Word 紧凑排版工程引擎 (Word Layout Engine)
 作为 Chinese-Report-Polishing 的可选后处理脚手架，实现：
-1. 双轨西文字体 (Consolas / Times New Roman) 与宋体混排
-2. Word 原生公式 (OMML m:oMath) 自动分词与注入
-3. 1x1 代码框表格 (支持跨页切分、软回车折行、首行绑定)
-4. 空行三态法则 (代码框上不空下空、图表上下皆空)
-5. Word COM / PowerShell 无损格式导出 (.doc / .pdf)
+1. 8523 dxa 表格与代码框收窄居中几何基准（留出 302 dxa 呼吸内缩量）
+2. 核心大章节另起新页（Page Break Before）强制硬约束
+3. 代码框单行容量极限（68 字符法则，严禁非必要过早折行）
+4. VS Code Beautifier 风格行尾注释垂直列对齐（基准第 44 列）与单行长注释顶格分工
+5. 1x1 代码框流式跨页（绝不设置 cantSplit，仅首行防悬挂）
+6. 空行三态法则（代码框上不空下空、数据表与图表上下皆空）
+7. 双轨西文字体 (Consolas / Times New Roman) 与宋体混排
+8. Word 原生公式 (OMML m:oMath) 自动分词与注入
+9. Word COM / PowerShell 无损格式导出 (.doc / .pdf)
 """
 
 from copy import deepcopy
@@ -24,6 +28,13 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 M_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+# 基准定死数值常量 (基于用户批注与 A4 版心精确计算)
+PAGE_BODY_WIDTH_DXA = 9127  # A4 纸张在左右边距 1418/1361 dxa 下的正文版心宽度
+BOX_BENCHMARK_WIDTH_DXA = 8523  # 表格与代码框收窄基准宽度 (约 150.3 mm / 426.15 pt)
+BREATHING_PAD_DXA = 302  # 两侧呼吸留白内边距 (9127 - 8523) / 2
+CODE_MAX_CHARS = 68  # Consolas 11pt 在 8523 dxa 下的最大单行安全字符容量
+COMMENT_ALIGN_BASE_COL = 44  # VS Code Beautifier 风格行尾注释基准列 (从 0 计数第 44 列)
 
 
 def set_run_font(run, ascii_font: str = "Times New Roman", size_pt: float = 11.0, bold: bool = False):
@@ -116,18 +127,123 @@ def append_rich_text(p: Paragraph, markup_text: str, size_pt: float = 11.0, bold
         set_run_font(r, "Times New Roman", size_pt=size_pt, bold=bold)
 
 
-def make_code_box(doc: Document, table_template_elem, code_text: str, allow_split: bool = True):
+def align_code_comments(raw_lines, max_chars: int = CODE_MAX_CHARS, base_col: int = COMMENT_ALIGN_BASE_COL):
     """
-    构建符合流式跨页原则的 1x1 代码框：
+    针对代码块执行 VS Code Beautifier 风格的注释垂直对齐与双轨分工：
+    1. 独立单行长注释（整行以 // 开头）：顶格或保持原缩进，绝不向右推移；
+    2. 行尾跟随注释（代码语句后的 //）：在垂直方向列对齐（基准第 44 列，或根据最大代码长度自适应）；
+    3. 绝不粗暴将空格压缩为 2 格。
+    """
+    parsed = []
+    max_code_len = 0
+    max_comment_len = 0
+    has_trailing_comment = False
+
+    for line in raw_lines:
+        stripped = line.rstrip()
+        if not stripped:
+            parsed.append(('empty', ''))
+            continue
+        
+        # 独立单行长注释 (整行以 // 开头)
+        l_stripped = stripped.lstrip()
+        if l_stripped.startswith('//'):
+            parsed.append(('full_comment', stripped))
+            continue
+        
+        # 包含行尾注释
+        if '//' in stripped:
+            parts = stripped.split('//', 1)
+            code_part = parts[0].rstrip()
+            comment_part = '//' + parts[1]
+            parsed.append(('trailing', code_part, comment_part))
+            if len(code_part) > max_code_len:
+                max_code_len = len(code_part)
+            if len(comment_part) > max_comment_len:
+                max_comment_len = len(comment_part)
+            has_trailing_comment = True
+        else:
+            parsed.append(('code', stripped))
+
+    # 确定行尾注释对齐列 (在不超过 max_chars 的前提下，取 max(max_code_len + 4, base_col))
+    if has_trailing_comment:
+        target_col = max(max_code_len + 4, base_col)
+        # 如果超出单行容量，自适应回退到允许的最大安全列
+        if target_col + max_comment_len > max_chars:
+            target_col = max(max_code_len + 2, max_chars - max_comment_len)
+    else:
+        target_col = base_col
+
+    formatted_lines = []
+    for item in parsed:
+        kind = item[0]
+        if kind == 'empty':
+            formatted_lines.append('')
+        elif kind == 'full_comment':
+            formatted_lines.append(item[1])
+        elif kind == 'code':
+            formatted_lines.append(item[1])
+        elif kind == 'trailing':
+            code_p = item[1]
+            comm_p = item[2]
+            pad_spaces = max(2, target_col - len(code_p))
+            formatted_lines.append(f"{code_p}{' ' * pad_spaces}{comm_p}")
+
+    return formatted_lines
+
+
+def make_code_box(doc: Document, table_template_elem, code_text: str, allow_split: bool = True, width_dxa: int = BOX_BENCHMARK_WIDTH_DXA):
+    """
+    构建符合 8523 dxa 基准与流式跨页原则的 1x1 代码框：
+    - 总宽度定死为 width_dxa (默认 8523 dxa)，水平居中
     - 绝不设置 cantSplit，允许跨页平滑断开
     - 仅首 1~2 行与上一段落建立软连接，其余行允许自然跨页
-    - 段内软回车折行，避免长行撑破表格边界
+    - 单行容量严格遵循 68 字符法则，严禁非必要过早折行
+    - VS Code Beautifier 风格行尾注释垂直列对齐
     """
     tbl_el = deepcopy(table_template_elem)
+    
+    # 1. 规范表格宽度与对齐 (定死 8523 dxa 居中)
+    tblPr = tbl_el.find(".//" + qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl_el.insert(0, tblPr)
+    
+    tblW = tblPr.find(qn("w:tblW"))
+    if tblW is None:
+        tblW = OxmlElement("w:tblW")
+        tblPr.append(tblW)
+    tblW.set(qn("w:w"), str(width_dxa))
+    tblW.set(qn("w:type"), "dxa")
+    
+    jc = tblPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        tblPr.append(jc)
+    jc.set(qn("w:val"), "center")
+    
+    # 规范网格列宽
+    tblGrid = tbl_el.find(".//" + qn("w:tblGrid"))
+    if tblGrid is not None:
+        for col in tblGrid.findall(qn("w:gridCol")):
+            col.set(qn("w:w"), str(width_dxa))
+
     tc = tbl_el.find(".//" + qn("w:tc"))
     for child in list(tc):
         if child.tag != qn("w:tcPr"):
             tc.remove(child)
+
+    # 规范单元格宽度
+    tcPr = tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = OxmlElement("w:tcPr")
+        tc.insert(0, tcPr)
+    tcW = tcPr.find(qn("w:tcW"))
+    if tcW is None:
+        tcW = OxmlElement("w:tcW")
+        tcPr.append(tcW)
+    tcW.set(qn("w:w"), str(width_dxa))
+    tcW.set(qn("w:type"), "dxa")
 
     # 显式移除行级 cantSplit，确保允许跨页
     tr = tbl_el.find(".//" + qn("w:tr"))
@@ -139,8 +255,11 @@ def make_code_box(doc: Document, table_template_elem, code_text: str, allow_spli
                 trPr.remove(cantSplit)
 
     raw_lines = [ln.rstrip() for ln in code_text.strip("\n").splitlines()]
+    # 执行 VS Code Beautifier 风格注释对齐
+    aligned_lines = align_code_comments(raw_lines, max_chars=CODE_MAX_CHARS, base_col=COMMENT_ALIGN_BASE_COL)
+
     return_types = {"static uint", "static void", "void", "static struct buf *", "static struct buf*"}
-    for idx, raw_line in enumerate(raw_lines):
+    for idx, raw_line in enumerate(aligned_lines):
         p_el = OxmlElement("w:p")
         tc.append(p_el)
         p = Paragraph(p_el, doc._body)
@@ -169,34 +288,98 @@ def make_code_box(doc: Document, table_template_elem, code_text: str, allow_spli
         
         # 仅前两行或特殊签名行与下一行绑定，避免整表被推下页
         stripped_cur = raw_line.strip()
-        prev_stripped = raw_lines[idx - 1].strip() if idx > 0 else ""
-        next_stripped = raw_lines[idx + 1].strip() if idx + 1 < len(raw_lines) else ""
+        prev_stripped = aligned_lines[idx - 1].strip() if idx > 0 else ""
+        next_stripped = aligned_lines[idx + 1].strip() if idx + 1 < len(aligned_lines) else ""
         keep_line = (
             idx in (0, 1)
             or stripped_cur in return_types
             or prev_stripped in return_types
             or next_stripped == "{"
-        ) and (idx < len(raw_lines) - 1)
+        ) and (idx < len(aligned_lines) - 1)
         fmt.keep_with_next = keep_line
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-        clean_line = re.sub(r"\s+(//)", r"  \1", raw_line.strip())
-        chunks = textwrap.wrap(
-            clean_line,
-            width=max(20, 58 - indent),
-            subsequent_indent="    ",
-            break_long_words=False,
-            break_on_hyphens=False,
-            replace_whitespace=False,
-        )
-        if len(chunks) > 1 and chunks[-1].strip() == "{":
-            chunks[-2] += " {"
-            chunks.pop()
-        display = "\n".join([chunks[0]] + [x[4:] for x in chunks[1:]]) if chunks else ""
+        # 单行容量法则：<= 68 字符绝对不进行折行；只有真实超出 68 字符时才折行
+        if len(raw_line) <= CODE_MAX_CHARS:
+            display = raw_line
+        else:
+            chunks = textwrap.wrap(
+                raw_line,
+                width=CODE_MAX_CHARS,
+                subsequent_indent="    ",
+                break_long_words=False,
+                break_on_hyphens=False,
+                replace_whitespace=False,
+            )
+            if len(chunks) > 1 and chunks[-1].strip() == "{":
+                chunks[-2] += " {"
+                chunks.pop()
+            display = "\n".join([chunks[0]] + [x[4:] for x in chunks[1:]]) if chunks else ""
+
         r = p.add_run(display)
         set_run_font(r, "Consolas", size_pt=11.0, bold=False)
 
     return tbl_el
+
+
+def format_table_width(table_elem, width_dxa: int = BOX_BENCHMARK_WIDTH_DXA, align: str = "center"):
+    """
+    将任意多行多列数据表格按 8523 dxa 基准进行宽度收窄与居中重调：
+    - tblW[@w="8523"][@type="dxa"]
+    - jc[@val="center"]
+    - 等比例重算各列 gridCol 与 tcW，确保列宽总和精确等于 8523 dxa
+    """
+    tblPr = table_elem.find(".//" + qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        table_elem.insert(0, tblPr)
+    
+    tblW = tblPr.find(qn("w:tblW"))
+    if tblW is None:
+        tblW = OxmlElement("w:tblW")
+        tblPr.append(tblW)
+    tblW.set(qn("w:w"), str(width_dxa))
+    tblW.set(qn("w:type"), "dxa")
+    
+    jc = tblPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        tblPr.append(jc)
+    jc.set(qn("w:val"), align)
+
+    tblGrid = table_elem.find(".//" + qn("w:tblGrid"))
+    if tblGrid is not None:
+        cols = tblGrid.findall(qn("w:gridCol"))
+        if cols:
+            widths = [int(c.attrib.get(qn("w:w"), 0)) for c in cols]
+            total_w = sum(widths) if sum(widths) > 0 else len(cols)
+            new_widths = [int(round(w * width_dxa / total_w)) for w in widths]
+            # 保证总和精确等于 width_dxa
+            diff = width_dxa - sum(new_widths)
+            new_widths[-1] += diff
+            for c, nw in zip(cols, new_widths):
+                c.set(qn("w:w"), str(nw))
+
+            # 同步更新各行的单元格宽度
+            for tr in table_elem.findall(".//" + qn("w:tr")):
+                tcs = tr.findall(".//" + qn("w:tc"))
+                for tc, nw in zip(tcs, new_widths):
+                    tcPr = tc.get_or_add_tcPr()
+                    tcW = tcPr.find(qn("w:tcW"))
+                    if tcW is None:
+                        tcW = OxmlElement("w:tcW")
+                        tcPr.append(tcW)
+                    tcW.set(qn("w:w"), str(nw))
+                    tcW.set(qn("w:type"), "dxa")
+
+
+def set_major_section_page_break(paragraph: Paragraph):
+    """为核心一级大章节段落设置强制另起新页 (pageBreakBefore)。"""
+    pPr = paragraph._element.get_or_add_pPr()
+    pb = pPr.find(qn("w:pageBreakBefore"))
+    if pb is None:
+        pb = OxmlElement("w:pageBreakBefore")
+        pPr.append(pb)
 
 
 def make_spacer(doc: Document, base_p_elem):
