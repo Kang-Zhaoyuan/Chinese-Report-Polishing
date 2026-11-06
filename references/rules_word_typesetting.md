@@ -45,7 +45,7 @@
    - 详细规定代码框跨页流式切分（严禁整行 cantSplit）、68 字符单行容量限制、超长逻辑单行代码跨行内在缩进（挂起缩进对齐括号）、行尾注释垂直列对齐及独立长注释顶格分工。
 3. **[references/typesetting_fonts_math.md](typesetting_fonts_math.md)**（《字符字体与公式规范》）：
    - 详细规定中文字体、代码字体与散文/缩写英文字体的精确映射，以及 Word 原生矢量数学公式（OMML）生成准则。
-4. **[references/typesetting_self_referential_case.md](typesetting_self_referential_case.md)**（《经典基准案例：自指示范范文》）：
+4. **[references/typesetting_self_referential_case.md](typesetting_self_referential_case.md)**（《经典基准案例：排版参考样例》）：
    - **核心基准参考**：短小精干的全要素自指范文，每一句话与代码均自指说明自身排版规则，并配有一页式实际渲染效果图。
 5. **配套工程脚本**：
    - [scripts/word_layout_engine.py](../scripts/word_layout_engine.py)：Word 紧凑排版渲染引擎（支持尺寸收窄、注释自适应对齐、跨行挂起缩进与格式导出）。

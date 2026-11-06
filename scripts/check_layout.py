@@ -4,13 +4,14 @@
 Word 实验报告排版机械静态检查器 (check_layout.py)
 对 .docx 报告进行机械化排版合规检测：
 1. 检查表格与 1x1 代码框是否遵循【8523 dxa 居中收窄基准】（留出 302 dxa 呼吸内缩量）
-2. 检查核心一级大章节标题是否遵循【强制另起新页】(pageBreakBefore 或 br type="page")
-3. 检查 1x1 代码框是否遵循【上不空行、下空一行】
-4. 检查 1x1 代码框是否【未设置 cantSplit】（允许自然跨页切分）
-5. 检查代码框单行容量是否遵循【68 字符法则】（严禁非必要过早折行）
-6. 检查代码框行尾注释是否遵循【VS Code Beautifier 风格垂直列对齐】
-7. 检查数据表格与插图是否遵循【上空一行、下空一行】
-8. 检查西文字体是否混淆（如将 GPU/CPU/RAM/PTE 设为 Consolas）
+2. 检查表格与代码框是否具有可见边框属性【tblBorders】与内边距
+3. 检查核心一级大章节标题是否遵循【强制另起新页】(pageBreakBefore 或 br type="page")
+4. 检查 1x1 代码框是否遵循【上不空行、下空一行】
+5. 检查 1x1 代码框是否【未设置 cantSplit】（允许自然跨页切分）
+6. 检查代码框单行容量是否遵循【68 字符法则】（严禁非必要过早折行）
+7. 检查代码框行尾注释是否遵循【VS Code Beautifier 风格垂直列对齐】
+8. 检查数据表格与插图是否遵循【上空一行、下空一行】
+9. 检查西文字体是否混淆（如将 GPU/CPU/RAM/PTE 设为 Consolas）
 """
 
 import sys
@@ -52,6 +53,16 @@ def check_word_layout(docx_path: str):
     # 建立 xml element 到 index 的映射
     elem_idx = {elem: i for i, elem in enumerate(body_elements)}
     
+    # 检查元素物理顺序与 sectPr 边界 (严禁在 sectPr 后出现正文元素导致倒置)
+    sect_found = False
+    for el_idx, el in enumerate(body_elements):
+        if el.tag.endswith('sectPr'):
+            sect_found = True
+        elif sect_found:
+            issues.append(
+                f"[Body Element {el_idx}] 文档结构错乱：在 sectPr 分节符之后发现了非法的 '{el.tag.split('}')[-1]}' 元素，导致表格与段落物理显示顺序倒置！"
+            )
+
     table_count = 0
     code_box_count = 0
     data_table_count = 0
@@ -79,6 +90,11 @@ def check_word_layout(docx_path: str):
         jc_val = jc_el.attrib.get(qn("w:val"), "") if jc_el is not None else ""
         if jc_val != "center":
             issues.append(f"[Table {t_idx}] 表格水平对齐方式为 '{jc_val}'，未设为 'center' 居中。")
+
+        # 检查是否包含边框
+        borders_el = tbl_el.find(".//" + qn("w:tblBorders"))
+        if borders_el is None:
+            issues.append(f"[Table {t_idx}] 表格未设置边框 tblBorders，在渲染或导出时将缺少可见边框线！")
 
         if grid_sum > MAX_FULL_PAGE_WIDTH_DXA:
             warnings.append(
@@ -122,7 +138,7 @@ def check_word_layout(docx_path: str):
                 col_span = max(trailing_comment_cols) - min(trailing_comment_cols)
                 if col_span > 1:
                     issues.append(
-                        f"[Table {t_idx} Code] 包含 {len(trailing_comment_cols)} 处行尾注释 '//' 未列对齐（列偏移跨度 {min(trailing_comment_cols)} ~ {max(trailing_comment_cols)}），应按 Beautifier 风格垂直对齐在同一列 (如基准第 {COMMENT_ALIGN_BASE_COL} 列)。"
+                        f"[Table {t_idx} Code] 包含 {len(trailing_comment_cols)} 处行尾注释 '//' 未列对齐（列偏移跨度 {min(trailing_comment_cols)} ~ {max(trailing_comment_cols)}），应按 Beautifier 风格垂直对齐在同一列。"
                     )
 
             # 检查前一个元素（上不空行）
@@ -131,12 +147,17 @@ def check_word_layout(docx_path: str):
                 if prev_el.tag.endswith('p'):
                     p_text = ''.join(prev_el.itertext()).strip()
                     if len(p_text) == 0:
-                        issues.append(f"[Table {t_idx}] 代码框上方存在空行！按准则应【上不空行】，引导语应紧贴代码框。")
+                        issues.append(f"[Table {t_idx}] 代码框上方存在空行！按准则应【上不空行】，代码说明段落应紧贴代码框。")
                     else:
                         pPr = prev_el.find(qn("w:pPr"))
                         kwn = pPr.find(qn("w:keepNext")) if pPr is not None else None
                         if kwn is None:
-                            issues.append(f"[Table {t_idx}] 代码框上方引导语未设置 keep_with_next，可能在页末发生标题与代码框孤悬断裂。")
+                            issues.append(f"[Table {t_idx}] 代码框上方代码说明段落未设置 keep_with_next，可能在页末发生标题与代码框孤悬断裂。")
+                        # 检查代码说明段落是否设置了首行缩进 2 字符
+                        ind_el = pPr.find(qn("w:ind")) if pPr is not None else None
+                        fl_val = ind_el.attrib.get(qn("w:firstLine"), "") if ind_el is not None else ""
+                        if not fl_val or not fl_val.isdigit() or int(fl_val) < 300:
+                            warnings.append(f"[Table {t_idx}] 代码框上方代码说明段落段落未设置首行缩进 2 字符 (ind firstLine='{fl_val}')。")
             
             # 检查后一个元素（下空一行）
             if idx < len(body_elements) - 1:
@@ -168,7 +189,6 @@ def check_word_layout(docx_path: str):
             has_pb_before = pPr.find(qn("w:pageBreakBefore")) is not None if pPr is not None else False
             has_br_page = any(b.attrib.get(qn("w:type")) == "page" for b in p._element.findall(".//" + qn("w:br")))
             
-            # 第一大节若紧跟在封面之后，也需分页；后续各大节均必须另起新页
             if not has_pb_before and not has_br_page:
                 issues.append(
                     f"[Paragraph {p_idx}] 核心一级大标题 '{p_text}' 未设置强制另起新页 (pageBreakBefore 或 br type='page')，存在页末孤悬隐患。"
@@ -182,7 +202,6 @@ def check_word_layout(docx_path: str):
             if rFonts is not None:
                 ascii_font = rFonts.attrib.get(qn("w:ascii"), "")
                 if ascii_font.lower() == "consolas":
-                    # 检查是否包含 GPU/CPU/RAM/PTE/Sv39 等纯缩写
                     for bad_acronym in ["GPU", "CPU", "RAM", "LRU", "PTE", "Sv39"]:
                         if re.search(r'\b' + bad_acronym + r'\b', run.text):
                             consolas_misused.append((p_idx, bad_acronym, run.text))

@@ -4,7 +4,7 @@
 
 苦AI味写作久矣，遂写一个 Skill，只针对“中国理工科大学生实验报告撰写”这个场景，尝试做一些优化。至于实验怎么完成，建议向神灵祈祷；**实验指导书以及实验报告撰写的要求是本Skill很重要的资源**，如果想图省事，就应该把它们全部都爬下来，打包成Markdown传进项目里。本 Skill 核心负责语言与逻辑审查；Word 排版工程作为可选独立插件（默认不启用）。
 
-> 你说得对，但我将要开始探针、快照、证据、门禁、夹具，还有哈希、冒烟、基线了。我要先建立唯一基线，再进行可追溯备份，先进行最小改动，我先进行一轮烟测，检查114个门禁是否通过，上线前进行一轮全量dry-run，上线后校验哈希值，最后进行一轮实测的验收矩阵！
+> 你说得对，但我将要开始探针、快照、证据、检查项、夹具，还有哈希、冒烟、基线了。我要先建立唯一基线，再进行可追溯备份，先进行最小改动，我先进行一轮烟测，检查114个检查项是否通过，上线前进行一轮全量dry-run，上线后校验哈希值，最后进行一轮实测的验收矩阵！
 
 我非常希望获得更多真实的修改的例子，以及人类的批注。目前正在做大量数据收集的工作，尝试训练一个会说人话的小模型，返璞归真。期待PR和Issue，任何实例都极其宝贵。
 
@@ -49,7 +49,7 @@
   - [references/typesetting_spacing_geometry.md](references/typesetting_spacing_geometry.md)：子手册一（版面几何与空行规范：左右边距、容器收窄、大章节分页与空行三态）。
   - [references/typesetting_code_blocks.md](references/typesetting_code_blocks.md)：子手册二（代码排版与注释规范：流式跨页、68 字符单行容量、逻辑单行跨行内在缩进、行尾注释垂直列对齐）。
   - [references/typesetting_fonts_math.md](references/typesetting_fonts_math.md)：子手册三（字符字体与公式规范：中西文字体映射、OMML 原生矢量公式）。
-  - [references/typesetting_self_referential_case.md](references/typesetting_self_referential_case.md)：经典基准案例（自指示范范文：全要素自指叙述与一页式渲染示范）。
+  - [references/typesetting_self_referential_case.md](references/typesetting_self_referential_case.md)：经典基准案例（排版参考样例：全要素自指叙述与一页式渲染示范）。
 - `scripts/`（包含语言扫描模块与排版工程套件）：
   - [scripts/word_layout_engine.py](scripts/word_layout_engine.py)：Word 紧凑排版工程引擎（支持 8523 dxa 收窄、Beautifier 注释对齐、跨页流式代码框与 Word COM 无损导出）。
   - [scripts/check_layout.py](scripts/check_layout.py)：Word 报告机械静态排版合规检查器。

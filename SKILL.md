@@ -62,7 +62,7 @@ description: 中文理工科实验报告的语言审查技能。由顶层调度�
   - [references/typesetting_spacing_geometry.md](references/typesetting_spacing_geometry.md)：子手册一（版面几何与空行规范：左右边距、容器收窄、大章节分页与空行三态）。
   - [references/typesetting_code_blocks.md](references/typesetting_code_blocks.md)：子手册二（代码排版与注释规范：流式跨页、68 字符单行容量、逻辑单行跨行内在缩进、行尾注释垂直列对齐）。
   - [references/typesetting_fonts_math.md](references/typesetting_fonts_math.md)：子手册三（字符字体与公式规范：中西文字体映射、OMML 原生矢量公式）。
-  - [references/typesetting_self_referential_case.md](references/typesetting_self_referential_case.md)：经典基准案例（自指示范范文：全要素自指叙述与一页式渲染示范）。
+  - [references/typesetting_self_referential_case.md](references/typesetting_self_referential_case.md)：经典基准案例（排版参考样例：全要素自指叙述与一页式渲染示范）。
 - `scripts/`（包含语言扫描模块与排版工程套件）：
   - [scripts/word_layout_engine.py](scripts/word_layout_engine.py)：Word 紧凑排版工程引擎（支持 8523 dxa 收窄、Beautifier 注释对齐、跨页流式代码框与 Word COM 无损导出）。
   - [scripts/check_layout.py](scripts/check_layout.py)：Word 报告机械静态排版合规检查器。
