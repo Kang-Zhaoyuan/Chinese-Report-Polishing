@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 工序二专职扫描器：信息冗余扫描 (scan_redundancy.py)
-配合角色：【信息冗余审核者】（负责第 4、5、6、7、8 类错误，专职“做减法”）
+配合角色：【信息冗余审核者】（负责第4～6类错误，专职“做减法”）
+第7～8类模式保留供 scan_visuals.py 调用。
 
 输出线索：
 1. 第 4 类：防御性局限声明（未测数据免责、内部机制未知免责、条件受限免责、泛泛优化空间免责、消极推脱/弱化结论/过度防卫词）；
@@ -22,6 +23,7 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
         pass
 import os
 from doc_parser import load_document_items, iter_clean_items, is_heading_item
+from prose_metrics import split_sentences
 
 # 第 4 类扩展：防御性推脱、弱化结论与过度防卫词库（按长度降序排布以便优先匹配最长词条）
 DEFENSIVE_HEDGING_KEYWORDS = [
@@ -36,7 +38,9 @@ DEFENSIVE_HEDGING_KEYWORDS = [
     '不一定', '不代表', '不保证', '不完全', '不必然', '不是说', '不构成', '不等于',
     '不能做', '不能把', '不证明', '尚不能', '并不是', '并不能',
     # 2 字高危推脱词
-    '并非',
+    '并非', '而非',
+    # 例后限定、额外插入的纠正或适用范围说明。
+    '仅用于说明', '不作为', '需要澄清的是', '严格来说',
 ]
 
 REDUNDANCY_PATTERNS = [
@@ -118,33 +122,44 @@ REDUNDANCY_PATTERNS = [
 ]
 
 
-def scan_redundancy(items):
+def scan_redundancy(items, include_visuals=False):
     pattern_hits = []
     numeric_recap_suspects = []
+    paragraph_tails = []
 
     for loc_id, text, kind in iter_clean_items(items):
         if is_heading_item(text, kind) or kind == 'tbl':
             continue
 
         for cat_name, pat in REDUNDANCY_PATTERNS:
-            m = re.search(pat, text)
-            if m:
+            if not include_visuals and cat_name.startswith(('第 7 类', '第 8 类')):
+                continue
+            for m in re.finditer(pat, text):
                 pattern_hits.append((loc_id, cat_name, m.group(0), text))
+
+        sentences = split_sentences(text)
+        if sentences:
+            tail = sentences[-1]
+            defensive = list(dict.fromkeys(
+                m.group() for cat, pat in REDUNDANCY_PATTERNS
+                if cat.startswith('第 4 类') for m in re.finditer(pat, tail)))
+            paragraph_tails.append((loc_id, tail, defensive, text))
 
         # 检测正文中单段列举 >= 3 个带小数点的具体测量数值（提示审核者核对是否与表格重复）
         floats = re.findall(r'\b\d+\.\d+\b', text)
-        if len(floats) >= 3:
+        if include_visuals and len(floats) >= 3:
             numeric_recap_suspects.append((loc_id, floats, text))
 
     return {
         'pattern_hits': pattern_hits,
         'numeric_recap_suspects': numeric_recap_suspects,
+        'paragraph_tails': paragraph_tails,
     }
 
 
 def print_redundancy_report(res, src_name):
     print(f"=== [工序二：信息冗余审核] 静态扫描线索: {src_name} ===")
-    print("说明：本报告仅供【信息冗余审核者】参考，聚焦第 4、5、6、7、8 类冗余删减问题。\n")
+    print("说明：本报告仅供【信息冗余审核者】参考，聚焦第4～6类；第7～8类交由图文专职审核者处理。\n")
 
     print(f"[1. 防御性声明、自我证实、常识解释与图表引导冗余] ({len(res['pattern_hits'])} 处)")
     for loc_id, cat_name, hit, text in res['pattern_hits']:
@@ -153,17 +168,18 @@ def print_redundancy_report(res, src_name):
     if not res['pattern_hits']:
         print("  - 无")
 
-    print(f"\n[2. 第 7 类线索：正文密集列举浮点测量值（请核对是否与图表重复）] ({len(res['numeric_recap_suspects'])} 处)")
-    for loc_id, floats, text in res['numeric_recap_suspects']:
-        preview = text if len(text) <= 85 else text[:82] + '...'
-        print(f"  - 位置 {loc_id} (含 {len(floats)} 个浮点数 {floats[:5]}):\n    上下文: {preview}")
-    if not res['numeric_recap_suspects']:
-        print("  - 无")
+    print('\n[2. 逐段审核：段落目的 → 各句贡献 → 最后一句]')
+    print('每句均须服务本段。重点检查段末的重复总结、防御性限定和额外反驳；同时处理段内命中。')
+    for loc, tail, defensive, context in res['paragraph_tails']:
+        print(f'  - {loc} 最后一句: {tail}')
+        if defensive:
+            print(f'    段末防御性措辞: {defensive}')
+        print(f'    整段: {context}')
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("用法: python scan_redundancy.py <文稿路径>")
         sys.exit(1)
-    items = load_document_items(sys.argv[1])
+    items = load_document_items(sys.argv[1], skip_first_page=True)
     print_redundancy_report(scan_redundancy(items), os.path.basename(sys.argv[1]))

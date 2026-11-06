@@ -8,7 +8,7 @@
 1. 第 11 类：人工智能过拟合词汇与欧化翻译腔（覆盖正文及数据表格单元格）；
 2. 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无物理机理支撑的形容词名词化套话）；
 3. 第 12 类：主语使用异常（伪拟人主语、第一人称泄露、同段 >= 3 次高频重复词）；
-4. 第 13 类：标点间超过 20 个阅读单位的超长单句；
+4. 第 13 类：标点间超过15个阅读单位的超长单句；
 5. 第 14 类：自然语言算术与中文数字参数；
 6. 第 15 类：复合分支未拆分（字数 >= 220 且含多项复杂分支的实心长段）。
 """
@@ -23,6 +23,7 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
         pass
 import os
 from doc_parser import load_document_items, iter_clean_items, is_heading_item
+from prose_metrics import reading_length, split_clauses
 
 AI_OVERFIT_WORDS = [
     # 软件工程与智能体行话迁移词
@@ -94,8 +95,6 @@ TRACKED_REPEAT_WORDS = [
     '在', '通过', '使用', '采用', '进行', '实现', '计算', '完成', '测量', '观察'
 ]
 
-SPLIT_PUNCT = re.compile(r'(?:[，。；：？！、,;?!（）()|]|\.(?![A-Za-z0-9_]))+')
-
 EXCLUDE_XING_WORDS = {'性能', '性质'}
 XING_STOP_CHARS = set('，。；：、！？（）() \t\n\r的了与和及在或从为更很最于以对使让把被向其该本此')
 
@@ -140,14 +139,12 @@ def find_xing_words(text):
 def measure_clause_length(clause):
     """
     计算分句的阅读长度：
-    将连续的英文单词、函数名、带上下标的变量或数字算式计为 1 个阅读单元，中文字符每个计为 1 个单元。
+    普通英文单词或数字计1，中文字符各计1；代码、路径及标点空白排除。
     """
-    collapsed = re.sub(r'[A-Za-z0-9_.\-+/*=<>()\[\]\u2070-\u209f\u00b2\u00b3\u00b9×÷±≈≠≤≥]+', 'X', clause)
-    collapsed = re.sub(r'\s+', '', collapsed)
-    return len(collapsed)
+    return reading_length(clause)
 
 
-def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=220):
+def scan_syntax(items, max_clause_len=15, repeat_threshold=3, min_collapsed_len=220):
     long_clauses = []
     repeat_issues = []
     word_and_syntax_hits = []
@@ -159,9 +156,9 @@ def scan_syntax(items, max_clause_len=20, repeat_threshold=3, min_collapsed_len=
             continue
 
         # 1. 第 13 类：超长单句检查
-        clauses = [c.strip() for c in SPLIT_PUNCT.split(text) if c.strip()]
+        clauses = split_clauses(text)
         for c in clauses:
-            if len(re.findall(r'[\u4e00-\u9fff]', c)) < 4:
+            if not re.search(r'[\u3400-\u4dbf\u4e00-\u9fff]', c):
                 continue
             c_len = measure_clause_length(c)
             if c_len > max_clause_len:
@@ -222,7 +219,7 @@ def print_syntax_report(res, src_name):
     print(f"=== [工序四：句法词法审核] 静态扫描线索: {src_name} ===")
     print("说明：本报告仅供【句法词法审核者】参考，聚焦第 11～15 类问题。\n")
 
-    print(f"[1. 第 13 类：超过 {res['max_clause_len']} 字符的超长单句] ({len(res['long_clauses'])} 处)")
+    print(f"[1. 第 13 类：超过 {res['max_clause_len']} 阅读单位的分句（须改写）] ({len(res['long_clauses'])} 处)")
     for loc_id, c_len, c_text in res['long_clauses']:
         print(f"  - 位置 {loc_id} (长度 {c_len}): 「{c_text}」")
     if not res['long_clauses']:
@@ -259,9 +256,10 @@ def print_syntax_report(res, src_name):
         print("  - 无")
 
 
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("用法: python scan_syntax.py <文稿路径>")
         sys.exit(1)
-    items = load_document_items(sys.argv[1])
+    items = load_document_items(sys.argv[1], skip_first_page=True)
     print_syntax_report(scan_syntax(items), os.path.basename(sys.argv[1]))

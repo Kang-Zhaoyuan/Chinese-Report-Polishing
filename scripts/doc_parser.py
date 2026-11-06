@@ -15,6 +15,7 @@ import os
 import re
 import zipfile
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 
 W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
@@ -100,7 +101,46 @@ def _extract_table_elements(tbl_elem, tbl_prefix, items):
                     items.append((f"{cell_prefix}P{p_i}", p_text, 'tbl'))
 
 
-def extract_from_docx(path):
+def iter_body_elements(body, skip_first_page=False):
+    """按保存的分页标记跳过封面，保留原正文元素序号。"""
+    started = not skip_first_page
+    for index, original in enumerate(body):
+        element = original
+        if not started:
+            before = element.find(f'./{W_NS}pPr/{W_NS}pageBreakBefore')
+            if before is not None and before.get(W_NS + 'val', '1') not in ('0', 'false', 'off'):
+                started = True
+            else:
+                def is_break(node):
+                    return (node.tag == W_NS + 'lastRenderedPageBreak' or
+                            node.tag == W_NS + 'br' and node.get(W_NS + 'type') == 'page')
+                if any(is_break(node) for node in element.iter()):
+                    element = deepcopy(element)
+
+                    def trim(parent):
+                        for child in list(parent):
+                            if is_break(child):
+                                parent.remove(child)
+                                return True
+                            if trim(child):
+                                return True
+                            parent.remove(child)
+                        return False
+
+                    trim(element)
+                    started = True
+                else:
+                    section = element.find(f'./{W_NS}pPr/{W_NS}sectPr')
+                    section_type = section.find(W_NS + 'type') if section is not None else None
+                    if section is not None and (section_type is None or section_type.get(W_NS + 'val') in ('nextPage', 'evenPage', 'oddPage')):
+                        started = True
+                    continue
+        yield index, element
+    if skip_first_page and not started:
+        raise ValueError('PAGE_BOUNDARY_MISSING: 文档未保存分页标记；请更新分页，或用 --include-cover 检查全文。')
+
+
+def extract_from_docx(path, skip_first_page=False):
     """
     从 .docx 提取正文段落及数据表/布局表单元格文本，仅排除 1x1 代码框。
     返回列表: [(loc_id, text, kind), ...] 其中 kind in ('p', 'tbl', 'code_box')
@@ -111,15 +151,21 @@ def extract_from_docx(path):
     with zipfile.ZipFile(path, 'r') as z:
         root = ET.fromstring(z.read('word/document.xml'))
         body = root.find(f'{W_NS}body')
-        for elem in body:
+        selected = dict(iter_body_elements(body, skip_first_page))
+        for index, original in enumerate(body):
+            elem = selected.get(index)
+            if original.tag == W_NS + 'p' and ''.join(original.itertext()).strip():
+                p_counter += 1
+            if original.tag == W_NS + 'tbl':
+                tbl_counter += 1
+            if elem is None:
+                continue
             tag = elem.tag.split('}')[-1]
             if tag == 'p':
                 text = ''.join(elem.itertext()).strip()
                 if text:
-                    p_counter += 1
                     items.append((f"P{p_counter}", text, 'p'))
             elif tag == 'tbl':
-                tbl_counter += 1
                 if is_code_box_table(elem):
                     items.append((f"T{tbl_counter}", "[1x1 代码/终端输出框]", 'code_box'))
                 else:
@@ -189,11 +235,11 @@ def extract_from_text(path):
     return items
 
 
-def load_document_items(path):
+def load_document_items(path, skip_first_page=False):
     """根据扩展名加载文稿条目列表 [(loc_id, text, kind), ...]。"""
     ext = os.path.splitext(path)[1].lower()
     if ext == '.docx':
-        return extract_from_docx(path)
+        return extract_from_docx(path, skip_first_page)
     return extract_from_text(path)
 
 
