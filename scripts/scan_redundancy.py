@@ -7,7 +7,7 @@
 
 输出线索：
 1. 第 4 类：防御性局限声明（未测数据免责、内部机制未知免责、条件受限免责、泛泛优化空间免责、消极推脱/弱化结论/过度防卫词）；
-2. 第 5 类：无信息增益的自我证实表述（空洞真实性修饰、重复任务要求前提、段末同义反复确认）；
+2. 第 5 类：无信息增益的自我证实表述（空洞真实性修饰、重复任务要求前提、段末同义反复确认、空洞代码展示引导）；
 3. 第 6 类：面向专业阅读者的基础常识解释（基础语法/下标/单位换算常识、跨表重复说明）；
 4. 第 7 类：重复图表已呈现的数据或符号说明（正文密集复述图表具体数值嫌疑、可移入表头的符号说明）；
 5. 第 8 类：冗余图表引导与主观自评。
@@ -42,6 +42,10 @@ DEFENSIVE_HEDGING_KEYWORDS = [
     # 例后限定、额外插入的纠正或适用范围说明。
     '仅用于说明', '不作为', '需要澄清的是', '严格来说',
 ]
+
+# 仅提示候选，不自动删改；由审核者判断引导语是否提供位置、功能或条件。
+CODE_PRESENTATION_CATEGORY = '第 5 类线索：代码展示动作引导（结合上下文判断）'
+CODE_PRESENTATION_PHRASES = ('摘录如下', '节选如下', '摘抄如下')
 
 REDUNDANCY_PATTERNS = [
     # 第 4 类：防御性局限声明（通用句式）
@@ -91,6 +95,14 @@ REDUNDANCY_PATTERNS = [
         r'验证了(?:本|上述|该|优化)(?:方法|方案|实现|算法|代码|策略)的(?:有效性|正确性|可行性|优越性)|'
         r'各轮(?:优化版|优化后)?(?:速度|性能|耗时|结果)均(?:高于|快于|优于|低于)(?:对应)?(?:原版|原始|优化前|未优化|基线)'
     ),
+    (
+        CODE_PRESENTATION_CATEGORY,
+        r'(?:' + '|'.join(re.escape(word) for word in CODE_PRESENTATION_PHRASES) + r')|'
+        r'(?:以下|下面)(?:给出|展示|列出|呈现|摘录|节选)(?:的)?'
+        r'(?:关键|核心|相关|部分)?(?:代码(?:片段)?|实现(?:片段)?|片段)|'
+        r'(?:核心|关键|相关)?(?:代码(?:片段)?|实现)'
+        r'(?:摘录|节选|展示|列出|呈现)?如下(?:所示)?'
+    ),
     # 第 6 类：面向专业阅读者的基础常识解释（仅匹配跨表重复交代、基础量纲/下标约定及教科书定义式句型；
     # 具体领域概念是否属于“无需解释的专业常识”，由审核者模型结合课程背景与上下文语义判定）
     (
@@ -134,7 +146,11 @@ def scan_redundancy(items, include_visuals=False):
         for cat_name, pat in REDUNDANCY_PATTERNS:
             if not include_visuals and cat_name.startswith(('第 7 类', '第 8 类')):
                 continue
-            for m in re.finditer(pat, text):
+            # 新增展示引导线索跳过 Markdown 行内代码；原有扫描行为保持不变。
+            scan_text = (re.sub(r'(?P<ticks>`+).*?(?P=ticks)',
+                                lambda m: ' ' * len(m.group(0)), text)
+                         if cat_name == CODE_PRESENTATION_CATEGORY else text)
+            for m in re.finditer(pat, scan_text):
                 pattern_hits.append((loc_id, cat_name, m.group(0), text))
 
         sentences = split_sentences(text)
@@ -160,6 +176,7 @@ def scan_redundancy(items, include_visuals=False):
 def print_redundancy_report(res, src_name):
     print(f"=== [工序二：信息冗余审核] 静态扫描线索: {src_name} ===")
     print("说明：本报告仅供【信息冗余审核者】参考，聚焦第4～6类；第7～8类交由图文专职审核者处理。\n")
+    print("代码展示引导仅为候选：结合位置、功能和条件信息判断，不自动删除或改写。\n")
 
     print(f"[1. 防御性声明、自我证实、常识解释与图表引导冗余] ({len(res['pattern_hits'])} 处)")
     for loc_id, cat_name, hit, text in res['pattern_hits']:

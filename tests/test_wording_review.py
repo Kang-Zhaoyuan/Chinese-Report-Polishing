@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 from prose_metrics import reading_length, split_sentences, split_clauses, comma_only_changes
 from scan_syntax import scan_syntax
-from scan_redundancy import scan_redundancy
+from scan_redundancy import scan_redundancy, CODE_PRESENTATION_CATEGORY
 from scan_visuals import scan_visuals
 from doc_parser import load_document_items
 from xml.etree import ElementTree as ET
@@ -101,6 +101,58 @@ class WordingReviewTests(unittest.TestCase):
         self.assertNotIn('严格来说', result['paragraph_tails'][0][2])
         self.assertIn('而非', result['paragraph_tails'][0][2])
         self.assertEqual(result['paragraph_tails'][0][3], text)
+
+    def test_code_presentation_candidates_and_context(self):
+        examples = [
+            '分配语句摘录如下：', '关键部分节选如下：', '代码摘抄如下：',
+            '下面展示代码片段。', '以下给出核心实现。', '下面列出相关代码。',
+            '以下呈现部分实现。', '核心代码如下：', '相关实现如下所示：',
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                result = scan_redundancy([('P7', text, 'p')])
+                hits = [h for h in result['pattern_hits'] if h[1] == CODE_PRESENTATION_CATEGORY]
+                self.assertTrue(hits)
+                self.assertTrue(all(h[0] == 'P7' and h[3] == text for h in hits))
+
+    def test_code_presentation_does_not_match_plain_description_or_inline_code(self):
+        examples = [
+            '参数含义如下：', '修改位置如下：', '如下条件成立时返回。',
+            '在 allocproc() 创建用户页表后，建立内核页表。',
+            '读取 `"代码如下"` 字符串，再返回。',
+            '读取 ``"摘录如下"`` 字符串。',
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                result = scan_redundancy([('P1', text, 'p')])
+                self.assertFalse(any(h[1] == CODE_PRESENTATION_CATEGORY
+                                     for h in result['pattern_hits']))
+
+    def test_code_presentation_cli_is_read_only_and_skips_code_blocks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            temp = Path(temp)
+            md = temp / 'presentation.md'
+            md.write_text('代码摘录如下：\n\n```c\nprintf("代码如下");\n```\n',
+                          encoding='utf-8')
+            docx = temp / 'presentation.docx'
+            cover = '<w:p><w:r><w:t>代码摘录如下：封面</w:t></w:r></w:p>'
+            prose = '<w:p><w:pPr><w:pageBreakBefore/></w:pPr><w:r><w:t>代码摘录如下：</w:t></w:r></w:p>'
+            code = ('<w:tbl><w:tr><w:tc><w:p><w:r><w:rPr>'
+                    '<w:rFonts w:ascii="Consolas"/></w:rPr>'
+                    '<w:t>printf("代码如下");</w:t></w:r></w:p></w:tc></w:tr></w:tbl>')
+            write_document(docx, cover + prose + code)
+            for path in [md, docx]:
+                with self.subTest(format=path.suffix):
+                    before = path.read_bytes()
+                    result = subprocess.run(
+                        [sys.executable, str(ROOT / 'scripts/check_prose.py'),
+                         str(path), '--stage', 'redundancy'],
+                        capture_output=True, encoding='utf-8')
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.count(CODE_PRESENTATION_CATEGORY), 1)
+                    self.assertNotIn('命中: “代码如下”', result.stdout)
+                    self.assertNotIn('封面', result.stdout)
+                    self.assertEqual(path.read_bytes(), before)
 
     def test_visual_assets_and_missing_placeholder(self):
         with tempfile.TemporaryDirectory() as temp:
