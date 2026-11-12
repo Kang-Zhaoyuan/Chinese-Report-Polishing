@@ -96,6 +96,19 @@ def check_word_layout(docx_path: str):
         if borders_el is None:
             issues.append(f"[Table {t_idx}] 表格未设置边框 tblBorders，在渲染或导出时将缺少可见边框线！")
 
+        # 检查是否包含非透明背景底色填充 (w:shd)
+        shd_fills = []
+        for shd_el in tbl_el.findall(".//" + qn("w:shd")):
+            fill_val = shd_el.attrib.get(qn("w:fill"), "").strip().upper()
+            if fill_val and fill_val not in ("AUTO", "FFFFFF", "NONE"):
+                if fill_val not in shd_fills:
+                    shd_fills.append(fill_val)
+        if shd_fills:
+            box_type = "1x1 代码框" if is_code_box else "数据表格"
+            issues.append(
+                f"[Table {t_idx}] {box_type}存在非透明背景底色填充 (w:shd fill={shd_fills})，应清除底色保持无色透明背景！"
+            )
+
         if grid_sum > MAX_FULL_PAGE_WIDTH_DXA:
             warnings.append(
                 f"[Table {t_idx}] 表格宽度为 {grid_sum} dxa，未收窄至基准宽度 8523 dxa (约150mm)，两侧缺少 302 dxa 呼吸留白。"

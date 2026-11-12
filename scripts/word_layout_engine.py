@@ -130,12 +130,16 @@ def append_rich_text(p: Paragraph, markup_text: str, size_pt: float = 11.0, bold
 
 
 def apply_table_borders_and_margins(tbl_el, border_color: str = BORDER_COLOR_HEX):
-    """确保表格拥有标准的 0.5pt 浅灰边框与紧凑内边距。"""
+    """确保表格拥有标准的 0.5pt 浅灰边框、紧凑内边距与无色透明背景。"""
     tblPr = tbl_el.find(".//" + qn("w:tblPr"))
     if tblPr is None:
         tblPr = OxmlElement("w:tblPr")
         tbl_el.insert(0, tblPr)
     
+    # 移除表格级背景底色填充 (w:shd)，确保透明背景
+    for shd in list(tblPr.findall(qn("w:shd"))):
+        tblPr.remove(shd)
+
     # 边框设置
     borders = tblPr.find(qn("w:tblBorders"))
     if borders is None:
@@ -163,6 +167,14 @@ def apply_table_borders_and_margins(tbl_el, border_color: str = BORDER_COLOR_HEX
             cellMar.append(m)
         m.set(qn("w:w"), val)
         m.set(qn("w:type"), "dxa")
+
+    # 清理所有单元格级背景底色 (w:shd) 与冲突的单元格边框/内边距，避免覆盖表格级规范
+    for tc in tbl_el.findall(".//" + qn("w:tc")):
+        tcPr = tc.find(qn("w:tcPr"))
+        if tcPr is not None:
+            for tag_name in ("w:shd", "w:tcBorders", "w:tcMar"):
+                for el in list(tcPr.findall(qn(tag_name))):
+                    tcPr.remove(el)
 
 
 def align_code_comments(raw_lines, max_chars: int = CODE_MAX_CHARS, base_col: int = COMMENT_ALIGN_BASE_COL):
