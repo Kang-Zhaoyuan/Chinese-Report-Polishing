@@ -5,7 +5,7 @@
 配合角色：【句法词法审核者】（负责第 11～15 类错误，专职“抠字句与段落颗粒度”）
 
 输出线索：
-1. 第 11 类：人工智能过拟合词汇与欧化翻译腔（覆盖正文及数据表格单元格）；
+1. 第 11 类：人工智能过拟合词汇与欧化翻译腔（覆盖标题、正文及数据表格单元格）；
 2. 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无物理机理支撑的形容词名词化套话）；
 3. 第 12 类：主语使用异常（伪拟人主语、第一人称泄露、同段 >= 3 次高频重复词）；
 4. 第 13 类：标点间超过15个阅读单位的超长单句；
@@ -37,6 +37,10 @@ AI_OVERFIT_WORDS = [
     # 机械过渡与顺从套话
     '你说得对', '诚然', '综上所述', '总而言之', '由此可见', '值得注意的是',
     '不可否认的是', '显而易见', '不难发现',
+    '耦', '拓扑', '流形', '凝聚', '锐度', '视阈', '退化',
+    '机理', '机制', '本质', '范式', '跃迁', '天花板', '底座', '演进',
+    '物理', '动态', '显式', '隐式', '核心', '关键', '典型', '代表性',
+    '细粒度', '多维',
 ]  # 注：所有“{形容词}性”抽象套话由独立单字扫描函数全面覆盖
 
 SYNTAX_PATTERNS = [
@@ -44,7 +48,14 @@ SYNTAX_PATTERNS = [
         '第 11 类：欧化翻译腔与公文套话句式',
         r'不仅.*?而且|一方面.*?另一方面|基于.*?而言|在.*?的背景下|'
         r'从.*?的(?:角度|维度|层面)来看|扮演着.*?的角色|发挥着.*?的作用|'
-        r'提供了.*?的(?:支撑|保障)|实现了.*?的(?:跨越|突破|闭环)'
+        r'提供了.*?的(?:支撑|保障)|实现了.*?的(?:跨越|突破|闭环)|'
+        r'构建[^。！？；\n]*?(?:体系|闭环|生态|格局)|'
+        r'推动[^。！？；\n]*?从[^。！？；\n]*?向[^。！？；\n]*?演进|'
+        r'围绕这一[^，。；！？\n]*|'
+        r'确立(?:了)?[^。！？；\n]*?(?:评测机制|诊断标准)|'
+        r'在[^，。；！？\n]+?(?:层面|维度)|'
+        r'约束[^，。；！？\n]*?积累|'
+        r'抑制[^，。；！？\n]*?历史[^，。；！？\n]*?遗忘'
     ),
     (
         '第 11 类：空洞的“{形容词}性”评价与归因套话',
@@ -152,7 +163,26 @@ def scan_syntax(items, max_clause_len=15, repeat_threshold=3, min_collapsed_len=
     collapsed_paras = []
 
     for loc_id, text, kind in iter_clean_items(items):
-        if is_heading_item(text, kind):
+        is_heading = is_heading_item(text, kind)
+
+        hit_words = [w for w in AI_OVERFIT_WORDS if w in text]
+        if hit_words:
+            word_and_syntax_hits.append((loc_id, '第 11 类：AI 过拟合词汇', f"命中词汇: {hit_words}", text))
+
+        # 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无机理支撑的形容词名词化套话）
+        xing_words = find_xing_words(text)
+        if xing_words:
+            xing_hits.append((loc_id, xing_words, text))
+
+        # 第 11、12、14 类正则模式检查
+        for cat_name, pat in SYNTAX_PATTERNS:
+            if is_heading and not cat_name.startswith('第 11 类'):
+                continue
+            m = re.search(pat, text)
+            if m:
+                word_and_syntax_hits.append((loc_id, cat_name, f"命中片段: “{m.group(0).strip()}”", text))
+
+        if is_heading:
             continue
 
         # 1. 第 13 类：超长单句检查
@@ -176,22 +206,6 @@ def scan_syntax(items, max_clause_len=15, repeat_threshold=3, min_collapsed_len=
                     found_repeats.append(f"“{w}”({count}次)")
             if found_repeats:
                 repeat_issues.append((loc_id, ', '.join(found_repeats), text))
-
-        # 3. 第 11 类：AI 过拟合词汇检查（含正文与表格单元格）
-        hit_words = [w for w in AI_OVERFIT_WORDS if w in text]
-        if hit_words:
-            word_and_syntax_hits.append((loc_id, '第 11 类：AI 过拟合词汇', f"命中词汇: {hit_words}", text))
-
-        # 4. 第 11 类：“性”字单字独立扫描（排除性能、性质，排查无机理支撑的形容词名词化套话）
-        xing_words = find_xing_words(text)
-        if xing_words:
-            xing_hits.append((loc_id, xing_words, text))
-
-        # 5. 第 11、12、14 类正则模式检查
-        for cat_name, pat in SYNTAX_PATTERNS:
-            m = re.search(pat, text)
-            if m:
-                word_and_syntax_hits.append((loc_id, cat_name, f"命中片段: “{m.group(0).strip()}”", text))
 
         # 5. 第 15 类：复合分支未拆分长段落（6 行/220 字以上且内含序列标记）
         if len(text) >= min_collapsed_len:
